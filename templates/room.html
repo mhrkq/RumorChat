@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="room-box">
+  <div class="message-box">
+    <h2> Chat Room: {{code}}</h2>
+    <div class="messages" id="messages"></div>
+    <div class="inputs">
+      <input type="text" rows="3" name="message" id="message" placeholder="Message" onkeyup="checkEnter(event)"/>
+      <button type="button" name="send" id="send-btn" onclick="sendMessage()">
+        Send
+      </button>
+    </div>
+  </div>
+  <div class="members-box">
+    <h2>Members</h2>
+    <div class="members" id="members"> test test </div>
+  </div>
+</div>
+<script type="text/javascript">
+  // When socketio initiated, you directly connect to the socketio server associated
+  // with the Flask website on localhost. This emits the 'connect' event to the server.
+  var socketio = io();
+
+  const messages = document.getElementById('messages');
+  const members = document.getElementById('members');
+
+  const createMessage = (name, msg, date) => {
+    const content = `
+    <div class="text">
+      <span>
+        <strong>${name}</strong>: ${msg}
+      </span>
+      <span class="muted">${date}</span>
+    </div>
+    `
+    messages.innerHTML += content; // adds content into the messages div with id=messages
+  };
+
+
+  socketio.on("message", (data) => {
+    createMessage(data.name, data.message, data.date);
+  })
+
+  const sendMessage = () => {
+    console.log('send message');
+    const message = document.getElementById('message');
+    if (message.value == "") return;
+    socketio.emit('message', {data: message.value});
+    message.value = "";
+  }
+
+  const checkEnter = (event) => {
+    if (event.key === 'Enter') {
+    sendMessage();
+    }
+  }
+
+  socketio.on("memberChange", (membersArr) => {
+    // display the members, updating the members div with the member names
+    let content = ``
+    membersArr.forEach((member) => {
+      content += `<div class="text">
+      <span>
+        <strong>${member}</strong>
+      </span>
+    </div>
+    `
+    console.log(content);
+    members.innerHTML = content;
+    })
+  });
+</script>
+{% for msg in messages %}
+<script type="text/javascript">
+  createMessage('{{msg.name}}', '{{msg.message}}');
+</script>
+{% endfor %}
+{% endblock %}
