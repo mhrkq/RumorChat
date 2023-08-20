@@ -3,12 +3,39 @@ from flask_socketio import SocketIO, emit, join_room, leave_room, send
 import random
 from string import ascii_uppercase
 from datetime import datetime
+from flask_sqlalchemy import SQLAlchemy
+
+DB_NAME = "rumorchatDB"
+DB_USER = "postgres"
+DB_PASSWORD = "rumorchat"
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "abc"
 
+app.config["SQLALCHEMY_DATABASE_URI"] = f"postgresql://{DB_USER}:{DB_PASSWORD}@localhost/{DB_NAME}"
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+# TODO: Add a "Leave Room" button 
+# TODO: Fully Incorporate database into the chat app
+# TODO: Incorporate a separate, private client-side chat box that logs messages to the database
+# TODO: Incoporate uncensored large-language model for the user to chat to in that separate chat box, for rumor-geneartion/detection purposes.
+
+
+
+# initialisation object for database
+db = SQLAlchemy(app)
+
+# Database Schema
+class Messages(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    room = db.Column(db.String, nullable=False)
+    name = db.Column(db.String, nullable=False)
+    message = db.Column(db.String, nullable=False)
+    date = db.Column(db.DateTime, nullable=False)
+
 # initialisation object for socketio library
 socketio = SocketIO(app)
+
 # TODO: This is currently stored in RAM. Need to store in database (PostgresSQL).
 rooms = {}
 
@@ -105,7 +132,6 @@ def connect(auth):
         leave_room(room)
         return
     
-    
     join_room(room)
     content = {
         "name":name,
@@ -146,4 +172,6 @@ def disconnect():
     print(f"{name} has left room {room}")  
 
 if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
     socketio.run(app, debug=True)
