@@ -89,6 +89,7 @@ def message(data):
     }
     # On receiving data from a client, send it to all clients in the room
     send(content, to=room)
+    # Save message to room's messages history
     rooms[room]["messages"].append(content)
     print(f"{session.get('name')} said: {data['data']} in room {room}")
 
@@ -112,6 +113,8 @@ def connect(auth):
         "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
     send(content, to=room)
+    # Save message to room's messages history
+    rooms[room]["messages"].append(content)
     
     # Prevents duplicate names in room upon refresh from same session
     if name not in rooms[room]["members"]:
@@ -137,6 +140,8 @@ def disconnect():
         "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
     send(content, to=room)
+    # Save message to room's messages history
+    rooms[room]["messages"].append(content)
     emit("memberChange", rooms[room]["members"], to=room)
     print(f"{name} has left room {room}")  
 

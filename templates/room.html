@@ -72,7 +72,7 @@
 </script>
 {% for msg in messages %}
 <script type="text/javascript">
-  createMessage('{{msg.name}}', '{{msg.message}}');
+  createMessage('{{msg.name}}', '{{msg.message}}', '{{msg.date}}');
 </script>
 {% endfor %}
 {% endblock %}
