@@ -35,7 +35,8 @@ class Rooms(db.Model):
 
 class Messages(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    room_code = db.Column(db.String, db.ForeignKey('rooms.code'), nullable=False)
+    current_room_code = db.Column(db.String, db.ForeignKey('rooms.code'), nullable=True)
+    original_room_code = db.Column(db.String, nullable=False)
     name = db.Column(db.String, nullable=False)
     message = db.Column(db.String, nullable=False)
     date = db.Column(db.DateTime, nullable=False)
@@ -44,15 +45,16 @@ class Messages(db.Model):
 socketio = SocketIO(app)
 
 # TODO: This is currently stored in RAM. Need to store in database (PostgresSQL).
-rooms = {}
+# rooms = {}
 
 def generate_unique_code(length):
     while True:
         code = ""
         for _ in range(length):
-            code += random.choice(ascii_uppercase)
+            code += random.choice(ascii_uppercase + digits)
         # return code if indeed unique   
-        if code not in rooms:
+        room_info = Rooms.query.filter_by(code=code).first()
+        if room_info is None:
             return code
 
 # Routes
@@ -79,23 +81,31 @@ def home():
         if join != False and not code:
             return render_template("home.html", error="Please enter a room code", code=code, name=name)
     
-        room = code
+        # room = code
+        room_info = Rooms.query.filter_by(code=code).first()
+        if room_info:
+            members_list = room_info.members.split(",") if room_info.members else []
         if create != False:
-            room = generate_unique_code(4)
-            rooms[room] = {"members":[], "messages":[]}
+            code  = generate_unique_code(6)
+            # rooms[room] = {"members":[], "messages":[]}
+            new_room = Rooms(code=code , members="")
+            db.session.add(new_room)
+            db.session.commit()
             
         # if not create, we assume they are trying to join a room
+        
+        
         # Refuse to join if room doesn't exist or name already exists in room
-        elif code not in rooms:
+        elif room_info is None:
             return render_template("home.html", error="Room code does not exist", code=code, name=name)
-        elif name in rooms[room]["members"]:
+        elif name in members_list:
             # If the name already exists in the room's members
             return render_template("home.html", error="Name already exists in the room", code=code, name=name)
 
         # Session is a semi-permanent way to store information about user
         # Temporary secure data stored in the server; expires after awhile
         # Stored persistently between requests
-        session["room"] = room
+        session["room"] = code
         session["name"] = name
         return redirect(url_for("room"))
     
@@ -106,15 +116,25 @@ def room():
     room = session.get("room")
     # Ensure user can only go to /room route if they either generated a new room
     # or joined an existing room from the home page
-    if room is None or session.get("name") is None or room not in rooms:
+    room_info = Rooms.query.filter_by(code=room).first()
+    if room is None or session.get("name") is None or room_info is None:
         return redirect(url_for("home"))
-    
-    return render_template("room.html",code=room, messages=rooms[room]["messages"])
+    # Extracting messages
+    messages_list = [
+        {
+            "name": message.name,
+            "message": message.message,
+            "date": message.date.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        for message in room_info.messages
+    ]
+    return render_template("room.html",code=room, messages=messages_list)
 
 @socketio.on("message")
 def message(data):
     room = session.get("room")
-    if room not in rooms:
+    room_info = Rooms.query.filter_by(code=room).first()
+    if room_info is None:
         return
     
     content = {
@@ -125,7 +145,10 @@ def message(data):
     # On receiving data from a client, send it to all clients in the room
     send(content, to=room)
     # Save message to room's messages history
-    rooms[room]["messages"].append(content)
+    # rooms[room]["messages"].append(content)
+    msg = Messages(current_room_code=room, original_room_code=room, name=content["name"], message=content["message"], date=content["date"])
+    db.session.add(msg)
+    db.session.commit()
     print(f"{session.get('name')} said: {data['data']} in room {room}")
 
 # using the initialisation object for socketio
@@ -133,13 +156,16 @@ def message(data):
 def connect(auth):
     room = session.get("room")
     name = session.get("name")
+    
     if not room or not name:
         return
-    if room not in rooms:
+    
+    room_info = Rooms.query.filter_by(code=room).first()
+    if room_info is None:
         # Leave room as it shouldn't exist
         leave_room(room)
         return
-    
+
     join_room(room)
     content = {
         "name":name,
@@ -147,14 +173,21 @@ def connect(auth):
         "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
     send(content, to=room)
-    # Save message to room's messages history
-    rooms[room]["messages"].append(content)
     
-    # Prevents duplicate names in room upon refresh from same session
-    if name not in rooms[room]["members"]:
-        rooms[room]["members"].append(name)
-    emit("memberChange", rooms[room]["members"], to=room)
-    print(f"{name} has joined room {room}. Current Members: {rooms[room]['members']}")
+    # Save message to room's messages history
+    # rooms[room]["messages"].append(content)
+    msg = Messages(current_room_code=room, original_room_code=room, name=content["name"], message=content["message"], date=content["date"])
+    db.session.add(msg)
+    db.session.commit()
+    
+    members_list = room_info.members.split(",") if room_info.members else []
+    # Add if name doesn't exist; prevents duplicate names in room upon refresh from same session
+    if name not in members_list:
+        members_list.append(name)
+    room_info.members = ",".join(members_list)
+    db.session.commit()
+    emit("memberChange", members_list, to=room)
+    print(f"{name} has joined room {room}. Current Members: {members_list}")
     
 
 @socketio.on("disconnect")
@@ -162,22 +195,36 @@ def disconnect():
     room = session.get("room")
     name = session.get("name")
     leave_room(room)
+    print(f"{name} has left room {room}") 
+    room_info = Rooms.query.filter_by(code=room).first()
     
-    # Remove room if no members left
-    if room in rooms:
-        rooms[room]["members"].remove(name)
-        if len(rooms[room]["members"]) <= 0:
-            del rooms[room]
     content = {
         "name":name,
         "message":f"{name} has left the room",
         "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
-    send(content, to=room)
+    
     # Save message to room's messages history
-    rooms[room]["messages"].append(content)
-    emit("memberChange", rooms[room]["members"], to=room)
-    print(f"{name} has left room {room}")  
+    msg = Messages(current_room_code=room, original_room_code=room, name=content["name"], message=content["message"], date=content["date"])
+    db.session.add(msg)
+    db.session.commit()
+    
+    
+    members_list = []
+    if room_info:
+        members_list = room_info.members.split(",") if room_info.members else []
+        if name in members_list:
+            members_list.remove(name)
+        room_info.members = ",".join(members_list)
+        db.session.commit()
+        if not members_list:
+            db.session.delete(room_info)
+            db.session.commit()
+            return
+            
+    send(content, to=room)
+    emit("memberChange", members_list, to=room) 
+     
 
 if __name__ == '__main__':
     with app.app_context():
