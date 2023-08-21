@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request, session, redirect, url_for
 from flask_socketio import SocketIO, emit, join_room, leave_room, send
 import random
-from string import ascii_uppercase
+from string import ascii_uppercase, ascii_letters, digits
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
 
@@ -15,7 +15,7 @@ app.config["SECRET_KEY"] = "abc"
 app.config["SQLALCHEMY_DATABASE_URI"] = f"postgresql://{DB_USER}:{DB_PASSWORD}@localhost/{DB_NAME}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-# TODO: Add a "Leave Room" button 
+# TODO: Add a "Leave Room" button? 
 # TODO: Fully Incorporate database into the chat app
 # TODO: Incorporate a separate, private client-side chat box that logs messages to the database
 # TODO: Incoporate uncensored large-language model for the user to chat to in that separate chat box, for rumor-geneartion/detection purposes.
@@ -26,9 +26,16 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db = SQLAlchemy(app)
 
 # Database Schema
+class Rooms(db.Model):
+    code = db.Column(db.String, primary_key=True)
+    members = db.Column(db.String) # Storing members as a comma-separated string
+
+    # Relationship
+    messages = db.relationship('Messages', backref='room_info', lazy=True)
+
 class Messages(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    room = db.Column(db.String, nullable=False)
+    room_code = db.Column(db.String, db.ForeignKey('rooms.code'), nullable=False)
     name = db.Column(db.String, nullable=False)
     message = db.Column(db.String, nullable=False)
     date = db.Column(db.DateTime, nullable=False)
@@ -64,9 +71,10 @@ def home():
         join = request.form.get("join", False)
         create = request.form.get("create", False)
         
-        if not name:
+        # Check if name contains symbols that are not typically safe
+        if not name or not all(char in ascii_letters + digits + " " for char in name):
             # code=code and name=name to preserve values in form on render_template-initiated reload.
-            return render_template("home.html", error="Please enter a name", code=code, name=name)
+            return render_template("home.html", error="Please enter a valid name (letters, numbers and space only)", code=code, name=name)
         
         if join != False and not code:
             return render_template("home.html", error="Please enter a room code", code=code, name=name)
