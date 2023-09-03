@@ -4,15 +4,26 @@ import random
 from string import ascii_uppercase, ascii_letters, digits
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import create_engine
+from sqlalchemy_utils import database_exists, create_database
 
 DB_NAME = "rumorchatDB"
 DB_USER = "postgres"
 DB_PASSWORD = "rumorchat"
 
-app = Flask(__name__)
-app.config["SECRET_KEY"] = "abc"
+DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@localhost/{DB_NAME}"
 
-app.config["SQLALCHEMY_DATABASE_URI"] = f"postgresql://{DB_USER}:{DB_PASSWORD}@localhost/{DB_NAME}"
+app = Flask(__name__)
+
+
+engine = create_engine(DATABASE_URL)
+
+# Create database if it does not exist
+if not database_exists(engine.url):
+    create_database(engine.url)
+
+app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
+app.config["SECRET_KEY"] = "abc"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 # TODO: Add a "Leave Room" button? 
@@ -228,5 +239,6 @@ def disconnect():
 
 if __name__ == '__main__':
     with app.app_context():
+        # print("creating db")
         db.create_all()
     socketio.run(app, debug=True)
