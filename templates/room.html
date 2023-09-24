@@ -1,19 +1,38 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="room-box">
-  <div class="message-box">
-    <h2> Chat Room: {{code}}</h2>
-    <div class="messages" id="messages"></div>
-    <div class="inputs">
-      <input type="text" rows="3" name="message" id="message" placeholder="Message" onkeyup="checkEnter(event)"/>
-      <button type="button" name="send" id="send-btn" onclick="sendMessage()">
-        Send
-      </button>
+<div class="parent-container">
+  <div class="room-box">
+    <div class="message-box">
+      <h2> Chat Room: {{code}}</h2>
+      <div class="messages" id="messages"></div>
+      <div class="inputs">
+        <input type="text" rows="3" name="message" id="message" placeholder="Message" onkeyup="checkEnter(event)"/>
+        <button type="button" name="send" id="send-btn" onclick="sendMessage()">
+          Send
+        </button>
+      </div>
+    </div>
+    <div class="members-box">
+      <h2>Members</h2>
+      <div class="members" id="members"> test test </div>
     </div>
   </div>
-  <div class="members-box">
-    <h2>Members</h2>
-    <div class="members" id="members"> test test </div>
+  <div class="room-box-chatbot">
+    <div class="sessions-box">
+      <h2>Sessions</h2>
+      <div class="sessions" id="sessions"> test test </div>
+    </div>
+    <div class="message-box-chatbot">
+      <h2> chatbot </h2>
+      <div class="messages-chatbot" id="messages-chatbot"></div>
+      <div class="inputs">
+        <input type="text" rows="3" name="message-chatbot" id="message-chatbot" placeholder="Message for chatbot" onkeyup="checkEnterChatbot(event)"/>
+        <button type="button" name="send-chatbot" id="send-btn-chatbot" onclick="sendMessagechatbot()">
+          Send
+        </button>
+      </div>
+    </div>
+    
   </div>
 </div>
 <script type="text/javascript">

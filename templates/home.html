@@ -15,5 +15,11 @@
     <li>{{error}}</li>
   </ul>
   {% endif %}
+  <h4>Existing Rooms:</h4>
+    <ul>
+        {% for room_code in existing_rooms %}
+        <li>{{ room_code }}</li>
+        {% endfor %}
+    </ul>
 </form>
 {% endblock %}

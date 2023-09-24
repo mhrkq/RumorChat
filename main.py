@@ -40,6 +40,9 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 # TODO: Incorporate a separate, private client-side chat box that logs messages to the database
 # TODO: Incoporate uncensored large-language model for the user to chat to in that separate chat box, for rumor-generation/detection purposes; preferably allow streaming of model responses.
 # TODO: For a particular username in a particular room, use database to store their prompts and responses with the private uncensored/jailbroken LLM.
+# TODO: DB Schema for chatbot-message table: username, session, prompt, response, date
+# TODO: When a new user is created, automatically create a new row in the chatbot-message table with the username and session number 1.
+# TODO: Create a session button for the chatbot section. When clicked, intialises a new row in the chatbot-message database table with the username and session number.
 
 
 # initialisation object for database
@@ -113,8 +116,14 @@ profile_pictures["Room"] = generate_identicon("Room")
 @app.route("/", methods=["GET", "POST"])
 def home():
     # Clear session when user goes to home page
-    # so that they can't navigate directly to chat page without entering name and room code
+    # so that they can't
+    # navigate directly to chat page without entering name and room code
     session.clear()
+    # Query the database for all room codes
+    existing_rooms = Rooms.query.with_entities(Rooms.code).all()
+    # Convert query results to a list of strings
+    existing_rooms = [room.code for room in existing_rooms]
+
     if request.method == "POST":
         # attempt to grab values from form; returns None if doesn't exist
         name = request.form.get("name")
@@ -126,10 +135,10 @@ def home():
         # Check if name contains symbols that are not typically safe
         if not name or not all(char in ascii_letters + digits + " " for char in name):
             # code=code and name=name to preserve values in form on render_template-initiated reload.
-            return render_template("home.html", error="Please enter a valid name (letters, numbers and space only)", code=code, name=name)
+            return render_template("home.html", error="Please enter a valid name (letters, numbers and space only)", code=code, name=name, existing_rooms=existing_rooms)
         
         if join != False and not code:
-            return render_template("home.html", error="Please enter a room code", code=code, name=name)
+            return render_template("home.html", error="Please enter a room code", code=code, name=name, existing_rooms=existing_rooms)
     
         # room = code
         room_info = Rooms.query.filter_by(code=code).first()
@@ -147,10 +156,10 @@ def home():
         
         # Refuse to join if room doesn't exist or name already exists in room
         elif room_info is None:
-            return render_template("home.html", error="Room code does not exist", code=code, name=name)
+            return render_template("home.html", error="Room code does not exist", code=code, name=name, existing_rooms=existing_rooms)
         elif name in members_list:
             # If the name already exists in the room's members
-            return render_template("home.html", error="Name already exists in the room", code=code, name=name)
+            return render_template("home.html", error="Name already exists in the room", code=code, name=name, existing_rooms=existing_rooms)
 
         # Session is a semi-permanent way to store information about user
         # Temporary secure data stored in the server; expires after awhile
@@ -159,7 +168,7 @@ def home():
         session["name"] = name
         return redirect(url_for("room"))
     
-    return render_template("home.html")
+    return render_template("home.html", existing_rooms=existing_rooms)
 
 @app.route("/room")
 def room():
@@ -169,7 +178,7 @@ def room():
     room_info = Rooms.query.filter_by(code=room).first()
     if room is None or session.get("name") is None or room_info is None:
         return redirect(url_for("home"))
-    # Extracting messages
+    # Extracting messages on room info from database
     messages_list = [
         {
             "name": message.name,
