@@ -7,6 +7,7 @@
 - Install Python 3.9
 - Install [PostgreSQL](https://www.postgresql.org/download/windows/)
 - **Recommended**: Install [pgAdmin](https://www.pgadmin.org/download/) for easier database management. This should already come with the PostgreSQL installer.
+- Clone this repo.
 - Create a .env file with the following information:
   - DB_NAME
   - DB_USER
@@ -16,7 +17,7 @@
     - DB_USER=postgres
     - DB_PASSWORD=rumorchat
     - SECRET_KEY=abc
-- Run the following commands:
+- Run the following commands in the repo folder:
 
 ```bash
 # create a virtual environment 
