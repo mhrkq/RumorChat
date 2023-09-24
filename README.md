@@ -51,6 +51,13 @@ python main.py
 - These sessions are saved and unique to the user's name. They also persist across all rooms for a particular name.
 - It is envisioned that the private chatbot would connect to an external API. For now, this is simulated by a simple echo bot that repeats the user's message back to them after 5 seconds.
 
+## TODO
+
+- [x] Create a basic chatroom with a public chatbox and a private chatbot.
+- [ ] Migrate database to a free cloud server (or a central server that we can connect to).
+- [ ] Interface with an actual large-language model.
+- [ ] Include prompt engineering and prompt-editing features.
+
 ## Database Schema
 
 ```python
