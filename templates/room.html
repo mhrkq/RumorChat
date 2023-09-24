@@ -4,6 +4,7 @@
   <div class="room-box">
     <div class="message-box">
       <h2> Chat Room: {{code}}</h2>
+      <div id="name" hidden>{{session['name']}}</div>
       <div class="messages" id="messages"></div>
       <div class="inputs">
         <input type="text" rows="3" name="message" id="message" placeholder="Message" onkeyup="checkEnter(event)"/>
@@ -21,13 +22,14 @@
     <div class="sessions-box">
       <h2>Sessions</h2>
       <div class="sessions" id="sessions"> test test </div>
+      <button type="button" id="new-session-btn" onclick="createNewSession()">Create New Session</button>
     </div>
     <div class="message-box-chatbot">
-      <h2> chatbot </h2>
+      <h2> Chatbot </h2>
       <div class="messages-chatbot" id="messages-chatbot"></div>
       <div class="inputs">
         <input type="text" rows="3" name="message-chatbot" id="message-chatbot" placeholder="Message for chatbot" onkeyup="checkEnterChatbot(event)"/>
-        <button type="button" name="send-chatbot" id="send-btn-chatbot" onclick="sendMessagechatbot()">
+        <button type="button" name="send-chatbot" id="send-btn-chatbot" onclick="sendMessageToChatbot()">
           Send
         </button>
       </div>
@@ -43,6 +45,32 @@
   const messages = document.getElementById('messages');
   const members = document.getElementById('members');
 
+  const messagesChatbot = document.getElementById('messages-chatbot');
+  const sessions = document.getElementById('sessions');
+
+  const curr_name = document.getElementById('name').innerHTML;
+
+  var current_session = 1;  // Initialize to 1 as default session
+
+
+  const scrollToBottom = () => {
+    messages.offsetHeight;
+    messages.scrollTop = messages.scrollHeight;
+  };
+
+  const scrollToBottomChatbot = () => {
+    messagesChatbot.offsetHeight;
+    messagesChatbot.scrollTop = messagesChatbot.scrollHeight;
+  };
+
+  const checkEnter = (event) => {
+    if (event.key === 'Enter') {
+    sendMessage();
+    }
+  };
+
+  
+  // Called multiple times to display the messages
   const createMessage = (name, msg, date, profile_picture) => {
     const content = `
     <div class="text">
@@ -59,12 +87,6 @@
     scrollToBottom();
   };
 
-  const scrollToBottom = () => {
-    messages.offsetHeight;
-    messages.scrollTop = messages.scrollHeight;
-  };
-
-
   socketio.on("message", (data) => {
     createMessage(data.name, data.message, data.date, data.profile_picture);
   });
@@ -76,12 +98,6 @@
     socketio.emit('message', {data: message.value});
     message.value = ""; // clear the message box
     // scrollToBottom();  // Scroll to the bottom after sending a message
-  };
-
-  const checkEnter = (event) => {
-    if (event.key === 'Enter') {
-    sendMessage();
-    }
   };
 
   socketio.on("memberChange", (membersArr) => {
@@ -98,11 +114,149 @@
     members.innerHTML = content;
     })
   });
+
+  // Functions below are for the Chatbot section
+
+  // Function to set the current session
+  function setCurrentSession(session) {
+      current_session = session;
+      loadSessionHistory(session);  // Load the conversation history of the new session
+  }
+
+  // Function to load available sessions
+  function loadSessions() {
+      // Implement an AJAX call here to fetch sessions.
+      // For example, it might look something like this:
+      fetch('/get_sessions', { method: 'POST', body: JSON.stringify({ username: "{{ session['name'] }}" }) })
+          .then(response => response.json())
+          .then(data => {
+              // Assume `data.sessions` is an array of session numbers
+              let sessionsHtml = "";
+              data.sessions.forEach(session => {
+                sessionsHtml += `<div class="session-item" onclick="setCurrentSession(${session})">Session ${session}</div>`;
+              });
+              document.getElementById("sessions").innerHTML = sessionsHtml;
+          });
+  }
+
+  function createNewSession() {
+    // Make an AJAX call to the server to create a new session
+    fetch('/create_new_session', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({username: "{{ session['name'] }}"})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Refresh the sessions
+            loadSessions();
+        } else {
+            alert("Failed to create new session.");
+        }
+    });
+  }
+
+  // For the Chatbot message
+
+  const createChatbotMessage = (name, msg, date, profile_picture) => {
+      // Create the HTML element here
+      const content = `
+      <div class="text">
+        <div>
+          <img src="data:image/png;base64,${profile_picture}" alt="Profile Picture">
+          <span>
+            <strong>${name}</strong>: ${msg}
+          </span>
+        </div>
+        <span class="muted">${date}</span>
+      </div>
+      `
+      messagesChatbot.innerHTML += content;
+      scrollToBottomChatbot();
+  };
+
+  const sendMessageToChatbot = () => {
+    const message = document.getElementById('message-chatbot');
+    if (message.value == "") return;
+
+    // Display the user's message prompt first, along with loading div.
+    // const userPrompt = `
+    // <div class="chatbot-text">
+    //   <div>
+    //     <span>
+    //       <strong>${session.get("name")}</strong>: ${message.value}
+    //    </span>
+    //  </div>
+    //  <span class="muted">${new Date().toLocaleString()}</span>
+    //</div>
+    //<div class="loading">...loading</div>`;
+    socketio.emit('chatbot_ack_req', {session: current_session, prompt: message.value});
+    socketio.emit('chatbot_prompt', {session: current_session, prompt: message.value});
+    message.value = "";
+    // Disable the send button and display the loading text
+    document.getElementById("send-btn-chatbot").disabled = true;
+  };
+
+  socketio.on("chatbot_ack", (data) => {
+    createChatbotMessage(data.name, data.message, data.date, data.profile_picture);
+    messagesChatbot.innerHTML += '<div class="loading">...loading</div>';
+  });
+
+  // Listen for chatbot responses
+  socketio.on("chatbot_response", (data) => {
+    // Remove "...loading" text and renable the send button
+    document.querySelector(".loading").remove();
+    document.getElementById("send-btn-chatbot").removeAttribute('disabled');
+    // createChatbotMessage(data.username, data.session, data.prompt, data.response, data.date);
+    // Display the chatbot's response
+    createChatbotMessage(data.name, data.message, data.date, data.profile_picture)
+    // messagesChatbot.innerHTML += chatbotResponse;
+  });
+
+  const checkEnterChatbot = (event) => {
+      if (event.key === 'Enter') {
+          sendMessageToChatbot();
+      }
+  };
+
+
+  // When the user clicks on the session
+  const loadSessionHistory = (session) => {
+    // Implement an AJAX call to fetch session history
+    // Clear the existing chatbot messages
+    messagesChatbot.innerHTML = "";
+    // Fetch the messages for this session
+    fetch('/get_session_history', { 
+        method: 'POST', 
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username: "{{ session['name'] }}", session: session }) 
+    })
+    .then(response => response.json())
+    .then(data => {
+        data.messages.forEach(msg => {
+            createChatbotMessage(session, msg.prompt, msg.response, msg.date);
+        });
+    });
+  };
+
+  loadSessions();  // Load the sessions when the page loads
+
+
 </script>
 {% for msg in messages %}
 <script type="text/javascript">
   var profile_picture = "{{ profile_pictures[msg.name] if msg.name in profile_pictures else '' }}";
   createMessage('{{msg.name}}', '{{msg.message}}', '{{msg.date}}', profile_picture);
+</script>
+{% endfor %}
+{% for chatbotMsg in chatbot_messages %}
+<script type="text/javascript">
+  createChatbotMessage('{{chatbotMsg.username}}', '{{chatbotMsg.session}}', '{{chatbotMsg.prompt}}', '{{chatbotMsg.response}}', '{{chatbotMsg.date}}');
 </script>
 {% endfor %}
 {% endblock %}

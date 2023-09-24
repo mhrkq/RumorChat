@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, session, redirect, url_for
+from flask import Flask, render_template, request, session, redirect, url_for, jsonify
 from flask_socketio import SocketIO, emit, join_room, leave_room, send
 import random
 from string import ascii_uppercase, ascii_letters, digits
@@ -63,6 +63,14 @@ class Messages(db.Model):
     name = db.Column(db.String, nullable=False)
     message = db.Column(db.String, nullable=False)
     date = db.Column(db.DateTime, nullable=False)
+    
+class ChatbotMessages(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String, nullable=False)
+    session = db.Column(db.Integer, nullable=False)
+    prompt = db.Column(db.String, nullable=False)
+    response = db.Column(db.String, nullable=False)
+    date = db.Column(db.DateTime, nullable=False)
 
 # initialisation object for socketio library
 socketio = SocketIO(app)
@@ -109,6 +117,7 @@ def generate_identicon(username):
     return img_str
 #################################
 profile_pictures["Room"] = generate_identicon("Room")
+profile_pictures["Chatbot"] = generate_identicon("Chatbot")
 
 # Routes
 
@@ -166,6 +175,9 @@ def home():
         # Stored persistently between requests
         session["room"] = code
         session["name"] = name
+        initial_chat_session = ChatbotMessages(username=name, session=1, prompt="", response="", date=datetime.now())
+        db.session.add(initial_chat_session)
+        db.session.commit()
         return redirect(url_for("room"))
     
     return render_template("home.html", existing_rooms=existing_rooms)
@@ -173,6 +185,7 @@ def home():
 @app.route("/room")
 def room():
     room = session.get("room")
+    name = session.get("name")
     # Ensure user can only go to /room route if they either generated a new room
     # or joined an existing room from the home page
     room_info = Rooms.query.filter_by(code=room).first()
@@ -187,7 +200,21 @@ def room():
         }
         for message in room_info.messages
     ]
-    return render_template("room.html",code=room, messages=messages_list, profile_pictures=profile_pictures)
+    
+    # Query for chatbot messages in default session
+    chatbot_messages = ChatbotMessages.query.filter_by(username=name, session=1).all()
+    chatbot_messages_list = [
+        {
+            "name": msg.username,
+            "session": msg.session,
+            "prompt": msg.prompt,
+            "response": msg.response,
+            "date": msg.date.strftime("%Y-%m-%d %H:%M:%S")
+        }
+        for msg in chatbot_messages
+    ]
+    return render_template("room.html",code=room, messages=messages_list,chatbot_messages=chatbot_messages_list, profile_pictures=profile_pictures, name=name)
+
 
 @socketio.on("message")
 def message(data):
@@ -292,7 +319,77 @@ def disconnect():
             
     send(content, to=room)
     emit("memberChange", members_list, to=room) 
-     
+
+
+###### Chatbot Routes ########
+@app.route('/get_sessions', methods=['POST'])
+def get_sessions():
+    username = request.json.get('username')
+    # Query the database to get the unique session numbers for the user
+    # For example:
+    sessions = db.session.query(ChatbotMessages.session).filter(ChatbotMessages.username == username).distinct().all()
+    sessions = [s[0] for s in sessions]  # Flatten the list
+    return jsonify({'sessions': sessions})
+
+@app.route('/get_session_history', methods=['POST'])
+def get_session_history():
+    data = request.json
+    username = data.get('username')
+    session = data.get('session')
+    # Query the database to get the chatbot messages for this session and user
+    # For example:
+    messages = ChatbotMessages.query.filter_by(username=username, session=session).all()
+    messages_data = [{"prompt": m.prompt, "response": m.response, "date": m.date.strftime("%Y-%m-%d %H:%M:%S")} for m in messages]
+    return jsonify({'messages': messages_data})
+
+
+@app.route('/create_new_session', methods=['POST'])
+def create_new_session():
+    data = request.json
+    username = data.get('username')
+    
+    # Query the database to find the latest session for this username
+    # For example:
+    last_session = db.session.query(db.func.max(ChatbotMessages.session)).filter(ChatbotMessages.username == username).scalar() or 0
+    
+    # Create a new row in the chatbot_messages table with this username and last_session + 1
+    new_session = ChatbotMessages(username=username, session=last_session + 1, prompt="", response="", date=datetime.now())
+    db.session.add(new_session)
+    db.session.commit()
+    
+    return jsonify({'success': True})
+
+@socketio.on("chatbot_ack_req")
+def chatbot_message(data):
+    username = session.get("name")
+    session_id = data["session"]
+    prompt = data["prompt"]
+    emit("chatbot_ack", {"name":username, "session": session_id, "message": prompt,
+                            "profile_picture": profile_pictures.get(username, ""),
+                            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")},
+                            to=session.get("room"))
+
+@socketio.on("chatbot_prompt")
+def chatbot_message(data):
+    username = session.get("name")
+    session_id = data["session"]
+    prompt = data["prompt"]
+    
+    # emit("chatbot_ack", {"name":username, "session": session_id, "message": prompt,"profile_picture": profile_pictures.get(username, ""),
+    #                         "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")},
+    #                         to=session.get("room"))
+    # For now, we will spoof the chatbot response after 5 seconds
+    import time
+    time.sleep(5)
+    response = "Hello, I am your chatbot."  # Replace this with API call
+    chatbot_msg = ChatbotMessages(username=username, session=session_id, prompt=prompt, response=response, date=datetime.now())
+    db.session.add(chatbot_msg)
+    db.session.commit()
+    emit("chatbot_response", {"name":"Chatbot", "session": session_id, "prompt": prompt,
+                            "message": response, "profile_picture": profile_pictures.get("Chatbot", ""),
+                            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")},
+                            to=session.get("room"))
+
 
 if __name__ == '__main__':
     with app.app_context():

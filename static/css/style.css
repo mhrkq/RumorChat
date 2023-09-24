@@ -88,6 +88,10 @@
   width: 10rem;
 }
 
+.session-item {
+  cursor: pointer;
+}
+
 .messages {
   overflow-y: scroll;
   flex: 1;
@@ -118,6 +122,15 @@ h2 {
 }
 
 .text {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.chatbot-text {
   display: flex;
   flex-direction: row;
   align-items: center;
