@@ -40,8 +40,8 @@ python main.py
 
 ## Screenshots
 
-![Screenshot1](.\images\screenshot1.png)
-![Screenshot2](.\images\screenshot2.png)
+![Screenshot1](images/screenshot1.png)
+![Screenshot2](images/screenshot2.png)
 
 ## Behaviour And Activity Flow
 
