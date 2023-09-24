@@ -28,7 +28,7 @@
   border-style: solid;
   border-radius: 10px;
   background-color: whitesmoke;
-  height: 80vh;
+  height: 45vh;
   display: flex;
   flex-direction: column;
   width: 80vw;
@@ -41,7 +41,7 @@
   border-style: solid;
   border-radius: 10px;
   background-color: whitesmoke;
-  height: 80vh;
+  height: 45vh;
   display: flex;
   flex-direction: column;
   width: 80vw;
@@ -88,8 +88,25 @@
   width: 10rem;
 }
 
+/* CSS to add a box around each session item */
 .session-item {
+  border: 1px solid #b5b5b5;
+  padding: 5px;
+  margin: 5px;
   cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 0.3s ease;
+  align-self: center;
+}
+
+.session-item:hover {
+  background-color: #d6eaff;
+}
+
+/* CSS to highlight the currently active session */
+.session-item.active {
+  background-color: #a3d0ff;
+  border-color: #007bff;
 }
 
 .messages {

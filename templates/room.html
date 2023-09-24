@@ -21,7 +21,13 @@
   <div class="room-box-chatbot">
     <div class="sessions-box">
       <h2>Sessions</h2>
-      <div class="sessions" id="sessions"> test test </div>
+      <div class="sessions" id="sessions">
+        {% for session_number in range(1, max_session+1) %}
+          <div class="session-item" data-session="{{ session_number }}" onclick="setCurrentSession({{ session_number }})">
+            Session {{ session_number }}
+          </div>
+        {% endfor %}
+      </div>
       <button type="button" id="new-session-btn" onclick="createNewSession()">Create New Session</button>
     </div>
     <div class="message-box-chatbot">
@@ -51,7 +57,6 @@
   const curr_name = document.getElementById('name').innerHTML;
 
   var current_session = 1;  // Initialize to 1 as default session
-
 
   const scrollToBottom = () => {
     messages.offsetHeight;
@@ -102,17 +107,23 @@
 
   socketio.on("memberChange", (membersArr) => {
     // display the members, updating the members div with the member names
-    let content = ``
+    let content = "";
     membersArr.forEach((member) => {
-      content += `<div class="text">
-      <span>
-        <strong>${member}</strong>
-      </span>
-    </div>
-    `
-    console.log(content);
+      if (member === curr_name) {
+        content += `<div class="text">
+          <span>
+            <strong>${member}</strong>
+          </span>
+        </div>`;
+      } else {
+        content += `<div class="text">
+          <span>
+            ${member}
+          </span>
+        </div>`;
+      }
+    });
     members.innerHTML = content;
-    })
   });
 
   // Functions below are for the Chatbot section
@@ -121,22 +132,43 @@
   function setCurrentSession(session) {
       current_session = session;
       loadSessionHistory(session);  // Load the conversation history of the new session
+      updateActiveSession();  // Update which session is visually marked as active
+  }
+
+  // Function to visually update the active session
+  function updateActiveSession() {
+    // Remove the active class from all session items
+    document.querySelectorAll('.session-item').forEach((elem) => {
+      elem.classList.remove('active');
+    });
+
+    // Add the active class to the current session
+    document.querySelector(`.session-item[data-session="${current_session}"]`).classList.add('active');
   }
 
   // Function to load available sessions
   function loadSessions() {
       // Implement an AJAX call here to fetch sessions.
       // For example, it might look something like this:
-      fetch('/get_sessions', { method: 'POST', body: JSON.stringify({ username: "{{ session['name'] }}" }) })
+      fetch('/get_sessions', { method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ name: "{{ session['name'] }}" }) })
           .then(response => response.json())
           .then(data => {
-              // Assume `data.sessions` is an array of session numbers
+              /// Sort sessions in ascending order
+              data.sessions.sort((a, b) => a - b);  // assuming sessions are numbers
+
+              // Generate HTML for sorted sessions
               let sessionsHtml = "";
               data.sessions.forEach(session => {
-                sessionsHtml += `<div class="session-item" onclick="setCurrentSession(${session})">Session ${session}</div>`;
+                sessionsHtml += `<div class="session-item" data-session="${session}" onclick="setCurrentSession(${session})">Session ${session}</div>`;
               });
               document.getElementById("sessions").innerHTML = sessionsHtml;
+              updateActiveSession();  // Set the initial active session
           });
+      
   }
 
   function createNewSession() {
@@ -146,7 +178,7 @@
         headers: {
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify({username: "{{ session['name'] }}"})
+        body: JSON.stringify({name: "{{ session['name'] }}"})
     })
     .then(response => response.json())
     .then(data => {
@@ -160,7 +192,6 @@
   }
 
   // For the Chatbot message
-
   const createChatbotMessage = (name, msg, date, profile_picture) => {
       // Create the HTML element here
       const content = `
@@ -181,23 +212,22 @@
   const sendMessageToChatbot = () => {
     const message = document.getElementById('message-chatbot');
     if (message.value == "") return;
-
-    // Display the user's message prompt first, along with loading div.
-    // const userPrompt = `
-    // <div class="chatbot-text">
-    //   <div>
-    //     <span>
-    //       <strong>${session.get("name")}</strong>: ${message.value}
-    //    </span>
-    //  </div>
-    //  <span class="muted">${new Date().toLocaleString()}</span>
-    //</div>
-    //<div class="loading">...loading</div>`;
-    socketio.emit('chatbot_ack_req', {session: current_session, prompt: message.value});
-    socketio.emit('chatbot_prompt', {session: current_session, prompt: message.value});
-    message.value = "";
-    // Disable the send button and display the loading text
+    // Disable the send button and textbox
     document.getElementById("send-btn-chatbot").disabled = true;
+    document.getElementById("message-chatbot").disabled = true;
+    document.getElementById("new-session-btn").disabled = true;
+    // Disable session items' onclick events and appearance
+    const session_items = document.querySelectorAll('.session-item');
+    session_items.forEach(item => {
+        item.style.pointerEvents = "none";
+        item.style.opacity = "0.5";
+    });
+    // Send a request for acknowledgement
+    socketio.emit('chatbot_req', {session: current_session, message: message.value});
+    // At the same time, prompt the chatbot for a response
+    socketio.emit('chatbot_prompt', {session: current_session, message: message.value});
+    message.value = "";
+    
   };
 
   socketio.on("chatbot_ack", (data) => {
@@ -207,10 +237,18 @@
 
   // Listen for chatbot responses
   socketio.on("chatbot_response", (data) => {
-    // Remove "...loading" text and renable the send button
+    // Remove "...loading" text and renable the send button and chatbot textbox
     document.querySelector(".loading").remove();
     document.getElementById("send-btn-chatbot").removeAttribute('disabled');
-    // createChatbotMessage(data.username, data.session, data.prompt, data.response, data.date);
+    document.getElementById("message-chatbot").removeAttribute('disabled');
+    document.getElementById("new-session-btn").removeAttribute('disabled');
+    // Re-enable session items' onclick events and appearance
+    const session_items = document.querySelectorAll('.session-item');
+    session_items.forEach(item => {
+        item.style.pointerEvents = "auto";
+        item.style.opacity = "1";
+    });
+    // createChatbotMessage(data.name, data.session, data.prompt, data.response, data.date);
     // Display the chatbot's response
     createChatbotMessage(data.name, data.message, data.date, data.profile_picture)
     // messagesChatbot.innerHTML += chatbotResponse;
@@ -234,12 +272,12 @@
         headers: {
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ username: "{{ session['name'] }}", session: session }) 
+        body: JSON.stringify({ name: "{{ session['name'] }}", session: session }) 
     })
     .then(response => response.json())
     .then(data => {
         data.messages.forEach(msg => {
-            createChatbotMessage(session, msg.prompt, msg.response, msg.date);
+            createChatbotMessage(msg.name, msg.message, msg.date, msg.profile_picture);
         });
     });
   };
@@ -256,7 +294,8 @@
 {% endfor %}
 {% for chatbotMsg in chatbot_messages %}
 <script type="text/javascript">
-  createChatbotMessage('{{chatbotMsg.username}}', '{{chatbotMsg.session}}', '{{chatbotMsg.prompt}}', '{{chatbotMsg.response}}', '{{chatbotMsg.date}}');
+  var profile_picture = "{{ profile_pictures[chatbotMsg.name] if chatbotMsg.name in profile_pictures else '' }}";
+  createChatbotMessage('{{chatbotMsg.name}}', '{{chatbotMsg.message}}', '{{chatbotMsg.date}}', profile_picture);
 </script>
 {% endfor %}
 {% endblock %}

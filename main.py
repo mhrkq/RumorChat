@@ -39,10 +39,10 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 # TODO: Add randomly generated profile pictures for users
 # TODO: Incorporate a separate, private client-side chat box that logs messages to the database
 # TODO: Incoporate uncensored large-language model for the user to chat to in that separate chat box, for rumor-generation/detection purposes; preferably allow streaming of model responses.
-# TODO: For a particular username in a particular room, use database to store their prompts and responses with the private uncensored/jailbroken LLM.
-# TODO: DB Schema for chatbot-message table: username, session, prompt, response, date
-# TODO: When a new user is created, automatically create a new row in the chatbot-message table with the username and session number 1.
-# TODO: Create a session button for the chatbot section. When clicked, intialises a new row in the chatbot-message database table with the username and session number.
+# TODO: For a particular name in a particular room, use database to store their prompts and responses with the private uncensored/jailbroken LLM.
+# TODO: DB Schema for chatbot-message table: name, session, prompt, response, date
+# TODO: When a new user is created, automatically create a new row in the chatbot-message table with the name and session number 1.
+# TODO: Create a session button for the chatbot section. When clicked, intialises a new row in the chatbot-message database table with the name and session number.
 
 
 # initialisation object for database
@@ -52,24 +52,23 @@ db = SQLAlchemy(app)
 class Rooms(db.Model):
     code = db.Column(db.String, primary_key=True)
     members = db.Column(db.String) # Storing members as a comma-separated string
-
     # Relationship
     messages = db.relationship('Messages', backref='room_info', lazy=True)
 
 class Messages(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    current_room_code = db.Column(db.String, db.ForeignKey('rooms.code'), nullable=True)
-    original_room_code = db.Column(db.String, nullable=False)
+    room_code = db.Column(db.String, db.ForeignKey('rooms.code'), nullable=False)
     name = db.Column(db.String, nullable=False)
     message = db.Column(db.String, nullable=False)
     date = db.Column(db.DateTime, nullable=False)
     
 class ChatbotMessages(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String, nullable=False)
+    name = db.Column(db.String, nullable=False)
+    owner = db.Column(db.String, nullable=False)
     session = db.Column(db.Integer, nullable=False)
-    prompt = db.Column(db.String, nullable=False)
-    response = db.Column(db.String, nullable=False)
+    # prompt = db.Column(db.String, nullable=False)
+    message = db.Column(db.String, nullable=False)
     date = db.Column(db.DateTime, nullable=False)
 
 # initialisation object for socketio library
@@ -90,9 +89,9 @@ def generate_unique_code(length):
         if room_info is None:
             return code
 
-def generate_identicon(username):
-    # Generate a seed from the username to make sure each username has a unique pattern and color
-    seed = int(md5(username.encode('utf-8')).hexdigest(), 16)
+def generate_identicon(name):
+    # Generate a seed from the name to make sure each name has a unique pattern and color
+    seed = int(md5(name.encode('utf-8')).hexdigest(), 16)
     random.seed(seed)
 
     # Create a 16x16 image with a white background
@@ -175,7 +174,7 @@ def home():
         # Stored persistently between requests
         session["room"] = code
         session["name"] = name
-        initial_chat_session = ChatbotMessages(username=name, session=1, prompt="", response="", date=datetime.now())
+        initial_chat_session = ChatbotMessages(name="Chatbot", owner=name, session=1, message=f"Started new session: 1", date=datetime.now())
         db.session.add(initial_chat_session)
         db.session.commit()
         return redirect(url_for("room"))
@@ -202,18 +201,24 @@ def room():
     ]
     
     # Query for chatbot messages in default session
-    chatbot_messages = ChatbotMessages.query.filter_by(username=name, session=1).all()
+    chatbot_messages = ChatbotMessages.query.filter_by(owner=name, session=1).all()
     chatbot_messages_list = [
         {
-            "name": msg.username,
+            "name": msg.name,
             "session": msg.session,
-            "prompt": msg.prompt,
-            "response": msg.response,
+            "owner": msg.owner,
+            "message": msg.message,
             "date": msg.date.strftime("%Y-%m-%d %H:%M:%S")
         }
         for msg in chatbot_messages
     ]
-    return render_template("room.html",code=room, messages=messages_list,chatbot_messages=chatbot_messages_list, profile_pictures=profile_pictures, name=name)
+    max_session = 1  # Initialize to 1 as default session
+    for chatbot_msg in chatbot_messages_list:
+        if chatbot_msg["session"] > max_session:
+            max_session = chatbot_msg["session"]
+    return render_template("room.html",code=room, messages=messages_list,
+                        chatbot_messages=chatbot_messages_list, profile_pictures=profile_pictures, 
+                        name=name,max_session=max_session)
 
 
 @socketio.on("message")
@@ -234,7 +239,7 @@ def message(data):
     send(content, to=room)
     
     # Save message to room's messages history
-    msg = Messages(current_room_code=room, original_room_code=room, name=content["name"], message=content["message"], date=content["date"])
+    msg = Messages(room_code=room, name=content["name"], message=content["message"], date=content["date"])
     db.session.add(msg)
     db.session.commit()
     print(f"{session.get('name')} said: {data['data']} in room {room}")
@@ -245,6 +250,7 @@ def connect(auth):
     room = session.get("room")
     name = session.get("name")
     
+    # Exit if the session is missing room or name
     if not room or not name:
         return
     
@@ -266,17 +272,17 @@ def connect(auth):
     }
     send(content, to=room)
     
-    # Save message to room's messages history
-    # rooms[room]["messages"].append(content)
-    msg = Messages(current_room_code=room, original_room_code=room, name=content["name"], message=content["message"], date=content["date"])
+    # Save connect message to room's messages history
+    msg = Messages(room_code=room, name=content["name"], message=content["message"], date=content["date"])
     db.session.add(msg)
     db.session.commit()
     
     members_list = room_info.members.split(",") if room_info.members else []
-    # Add if name doesn't exist; prevents duplicate names in room upon refresh from same session
+    # Add name to members list if name doesn't there exist; prevents duplicate names in room upon refresh from same session
     if name not in members_list:
         members_list.append(name)
     room_info.members = ",".join(members_list)
+    
     db.session.commit()
     emit("memberChange", members_list, to=room)
     print(f"{name} has joined room {room}. Current Members: {members_list}")
@@ -297,8 +303,8 @@ def disconnect():
         "profile_picture": profile_pictures.get("Room", "")
     }
     
-    # Save message to room's messages history
-    msg = Messages(current_room_code=room, original_room_code=room, name=content["name"], message=content["message"], date=content["date"])
+    # Save disconnect message to room's messages history
+    msg = Messages(room_code=room, name=content["name"], message=content["message"], date=content["date"])
     db.session.add(msg)
     db.session.commit()
     
@@ -322,73 +328,77 @@ def disconnect():
 
 
 ###### Chatbot Routes ########
+# TODO
 @app.route('/get_sessions', methods=['POST'])
 def get_sessions():
-    username = request.json.get('username')
+    name = request.json.get('name')
     # Query the database to get the unique session numbers for the user
-    # For example:
-    sessions = db.session.query(ChatbotMessages.session).filter(ChatbotMessages.username == username).distinct().all()
+    sessions = db.session.query(ChatbotMessages.session).filter(ChatbotMessages.owner == name).distinct().all()
     sessions = [s[0] for s in sessions]  # Flatten the list
-    return jsonify({'sessions': sessions})
+    result = jsonify({'sessions': sessions})
+    return result
 
+# TODO
 @app.route('/get_session_history', methods=['POST'])
 def get_session_history():
     data = request.json
-    username = data.get('username')
+    name = data.get('name')
     session = data.get('session')
     # Query the database to get the chatbot messages for this session and user
     # For example:
-    messages = ChatbotMessages.query.filter_by(username=username, session=session).all()
-    messages_data = [{"prompt": m.prompt, "response": m.response, "date": m.date.strftime("%Y-%m-%d %H:%M:%S")} for m in messages]
+    messages = ChatbotMessages.query.filter_by(owner=name, session=session).all()
+    messages_data = [{"name": m.name, "owner": m.owner, "message": m.message, "date": m.date.strftime("%Y-%m-%d %H:%M:%S"),"profile_picture": profile_pictures.get(m.name, "")} for m in messages]
     return jsonify({'messages': messages_data})
 
-
+# TODO
 @app.route('/create_new_session', methods=['POST'])
 def create_new_session():
     data = request.json
-    username = data.get('username')
+    name = data.get('name')
     
-    # Query the database to find the latest session for this username
+    # Query the database to find the latest session for this name
     # For example:
-    last_session = db.session.query(db.func.max(ChatbotMessages.session)).filter(ChatbotMessages.username == username).scalar() or 0
-    
-    # Create a new row in the chatbot_messages table with this username and last_session + 1
-    new_session = ChatbotMessages(username=username, session=last_session + 1, prompt="", response="", date=datetime.now())
+    last_session = db.session.query(db.func.max(ChatbotMessages.session)).filter(ChatbotMessages.owner == name).scalar() or 0
+    new_session = last_session + 1
+    # Create a new row in the chatbot_messages table with this name and last_session + 1
+    new_session = ChatbotMessages(name="Chatbot", owner=name, session=new_session, message=f"Started new session: {new_session}", date=datetime.now())
     db.session.add(new_session)
     db.session.commit()
     
     return jsonify({'success': True})
 
-@socketio.on("chatbot_ack_req")
+@socketio.on("chatbot_req")
 def chatbot_message(data):
-    username = session.get("name")
+    sid = request.sid
+    name = session.get("name")
     session_id = data["session"]
-    prompt = data["prompt"]
-    emit("chatbot_ack", {"name":username, "session": session_id, "message": prompt,
-                            "profile_picture": profile_pictures.get(username, ""),
+    message = data["message"]
+    chatbot_msg = ChatbotMessages(name=name, owner=name, session=session_id, message=message, date=datetime.now())
+    db.session.add(chatbot_msg)
+    db.session.commit()
+    emit("chatbot_ack", {"name":name, "session": session_id, "message": message,
+                            "profile_picture": profile_pictures.get(name, ""),
                             "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")},
-                            to=session.get("room"))
+                             room=sid)
 
 @socketio.on("chatbot_prompt")
 def chatbot_message(data):
-    username = session.get("name")
+    sid = request.sid
+    name = session.get("name")
     session_id = data["session"]
-    prompt = data["prompt"]
-    
-    # emit("chatbot_ack", {"name":username, "session": session_id, "message": prompt,"profile_picture": profile_pictures.get(username, ""),
-    #                         "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")},
-    #                         to=session.get("room"))
+    prompt = data["message"]
+
     # For now, we will spoof the chatbot response after 5 seconds
     import time
     time.sleep(5)
-    response = "Hello, I am your chatbot."  # Replace this with API call
-    chatbot_msg = ChatbotMessages(username=username, session=session_id, prompt=prompt, response=response, date=datetime.now())
+    response = f"Hello, I am your chatbot. You said: {prompt}"  # Replace this with API call, respond using the prompt
+    chatbot_msg = ChatbotMessages(name="Chatbot", owner=name, session=session_id, message=response, date=datetime.now())
     db.session.add(chatbot_msg)
     db.session.commit()
-    emit("chatbot_response", {"name":"Chatbot", "session": session_id, "prompt": prompt,
+    emit("chatbot_response", {"name":"Chatbot", "session": session_id,
                             "message": response, "profile_picture": profile_pictures.get("Chatbot", ""),
                             "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")},
-                            to=session.get("room"))
+                            room=sid)
 
 
 if __name__ == '__main__':
