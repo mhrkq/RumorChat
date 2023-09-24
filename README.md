@@ -5,7 +5,8 @@
 ## Requirements
 
 - Install Python 3.9
-- Install [PostgreSQL](https://www.postgresql.org/download/windows/) 
+- Install [PostgreSQL](https://www.postgresql.org/download/windows/)
+- **Recommended**: Install [pgAdmin](https://www.pgadmin.org/download/) for easier database management. This should already come with the PostgreSQL installer.
 - Create a .env file with the following information:
   - DB_NAME
   - DB_USER
@@ -37,11 +38,6 @@ pip install -r requirements.txt
 # run main script
 python main.py
 ```
-
-## Screenshots
-
-![Screenshot1](images/screenshot1.png)
-![Screenshot2](images/screenshot2.png)
 
 ## Behaviour And Activity Flow
 
@@ -79,3 +75,8 @@ class ChatbotMessages(db.Model):
     message = db.Column(db.String, nullable=False)
     date = db.Column(db.DateTime, nullable=False)
 ```
+
+## Screenshots
+
+![Screenshot1](images/screenshot1.png)
+![Screenshot2](images/screenshot2.png)
