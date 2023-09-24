@@ -6,10 +6,20 @@ from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import create_engine
 from sqlalchemy_utils import database_exists, create_database
+from PIL import Image, ImageDraw
+import base64
+from io import BytesIO
+from hashlib import md5
+import os
+from dotenv import load_dotenv
 
-DB_NAME = "rumorchatDB"
-DB_USER = "postgres"
-DB_PASSWORD = "rumorchat"
+
+# Load environment variables from the .env file
+load_dotenv()
+
+DB_NAME = os.getenv("DB_NAME")
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
 
 DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@localhost/{DB_NAME}"
 
@@ -23,14 +33,13 @@ if not database_exists(engine.url):
     create_database(engine.url)
 
 app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
-app.config["SECRET_KEY"] = "abc"
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-# TODO: Add a "Leave Room" button? 
-# TODO: Fully Incorporate database into the chat app
+# TODO: Add randomly generated profile pictures for users
 # TODO: Incorporate a separate, private client-side chat box that logs messages to the database
-# TODO: Incoporate uncensored large-language model for the user to chat to in that separate chat box, for rumor-geneartion/detection purposes.
-
+# TODO: Incoporate uncensored large-language model for the user to chat to in that separate chat box, for rumor-generation/detection purposes; preferably allow streaming of model responses.
+# TODO: For a particular username in a particular room, use database to store their prompts and responses with the private uncensored/jailbroken LLM.
 
 
 # initialisation object for database
@@ -55,9 +64,11 @@ class Messages(db.Model):
 # initialisation object for socketio library
 socketio = SocketIO(app)
 
-# TODO: This is currently stored in RAM. Need to store in database (PostgresSQL).
 # rooms = {}
+profile_pictures = {}
 
+
+###### Utility Functions ########
 def generate_unique_code(length):
     while True:
         code = ""
@@ -67,6 +78,34 @@ def generate_unique_code(length):
         room_info = Rooms.query.filter_by(code=code).first()
         if room_info is None:
             return code
+
+def generate_identicon(username):
+    # Generate a seed from the username to make sure each username has a unique pattern and color
+    seed = int(md5(username.encode('utf-8')).hexdigest(), 16)
+    random.seed(seed)
+
+    # Create a 16x16 image with a white background
+    image = Image.new('RGB', (16, 16), color='white')
+    d = ImageDraw.Draw(image)
+
+    # Generate a unique but visible color based on the seed
+    color = (random.randint(50, 200), random.randint(50, 200), random.randint(50, 200))
+
+    # Generate a random pattern.
+    # Only half of the image needs to be generated due to symmetry.
+    for x in range(0, 8):
+        for y in range(0, 16):
+            if random.choice([True, False]):
+                d.point((x, y), fill=color)
+                d.point((15 - x, y), fill=color)  # Symmetric point
+
+    buffered = BytesIO()
+    image.save(buffered, format="PNG")
+    img_str = base64.b64encode(buffered.getvalue()).decode()
+
+    return img_str
+#################################
+profile_pictures["Room"] = generate_identicon("Room")
 
 # Routes
 
@@ -139,7 +178,7 @@ def room():
         }
         for message in room_info.messages
     ]
-    return render_template("room.html",code=room, messages=messages_list)
+    return render_template("room.html",code=room, messages=messages_list, profile_pictures=profile_pictures)
 
 @socketio.on("message")
 def message(data):
@@ -151,12 +190,14 @@ def message(data):
     content = {
         "name":session.get("name"),
         "message":data["data"],
-        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "profile_picture": profile_pictures.get(session.get("name"), "")
     }
+    
     # On receiving data from a client, send it to all clients in the room
     send(content, to=room)
+    
     # Save message to room's messages history
-    # rooms[room]["messages"].append(content)
     msg = Messages(current_room_code=room, original_room_code=room, name=content["name"], message=content["message"], date=content["date"])
     db.session.add(msg)
     db.session.commit()
@@ -177,11 +218,15 @@ def connect(auth):
         leave_room(room)
         return
 
+    if name not in profile_pictures:
+        profile_pictures[name] = generate_identicon(name)
+        
     join_room(room)
     content = {
-        "name":name,
+        "name":"Room",
         "message":f"{name} has joined the room",
-        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "profile_picture": profile_pictures.get("Room", "")
     }
     send(content, to=room)
     
@@ -210,9 +255,10 @@ def disconnect():
     room_info = Rooms.query.filter_by(code=room).first()
     
     content = {
-        "name":name,
+        "name":"Room",
         "message":f"{name} has left the room",
-        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "profile_picture": profile_pictures.get("Room", "")
     }
     
     # Save message to room's messages history
@@ -228,10 +274,12 @@ def disconnect():
             members_list.remove(name)
         room_info.members = ",".join(members_list)
         db.session.commit()
-        if not members_list:
-            db.session.delete(room_info)
-            db.session.commit()
-            return
+        
+        # Delete room if no members left (REMOVED FOR NOW; LET'S PERSIST ROOMS)
+        # if not members_list:
+        #     db.session.delete(room_info)
+        #     db.session.commit()
+        #     return
             
     send(content, to=room)
     emit("memberChange", members_list, to=room) 
