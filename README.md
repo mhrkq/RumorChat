@@ -10,25 +10,23 @@
   - DB_NAME
   - DB_USER
   - DB_PASSWORD
-  - SECRET_KEY (can be anything)
-  **Example**:
-
-  DB_NAME=rumorchatDB
-  DB_USER=postgres
-  DB_PASSWORD=rumorchat
-  SECRET_KEY=abc
+  - SECRET_KEY (can be anything). For example:
+    - DB_NAME=rumorchatDB
+    - DB_USER=postgres
+    - DB_PASSWORD=rumorchat
+    - SECRET_KEY=abc
 - Run the following commands:
 
 ```bash
 # create a virtual environment 
 python -m venv env 
 
-# activate the virtual environment 
-# if Linux
-source env/bin/activate
+# activate the virtual environment
 
 # if Windows
-.\env\Scripts\activate
+.\env\Scripts\activate 
+# if Linux
+source env/bin/activate
 
 # upgrade pip
 python -m pip install --upgrade pip
@@ -38,7 +36,6 @@ pip install -r requirements.txt
 
 # run main script
 python main.py
-
 ```
 
 ## Screenshots
