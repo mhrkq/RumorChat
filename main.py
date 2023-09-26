@@ -36,15 +36,6 @@ app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-# TODO: Add randomly generated profile pictures for users
-# TODO: Incorporate a separate, private client-side chat box that logs messages to the database
-# TODO: Incoporate uncensored large-language model for the user to chat to in that separate chat box, for rumor-generation/detection purposes; preferably allow streaming of model responses.
-# TODO: For a particular name in a particular room, use database to store their prompts and responses with the private uncensored/jailbroken LLM.
-# TODO: DB Schema for chatbot-message table: name, session, prompt, response, date
-# TODO: When a new user is created, automatically create a new row in the chatbot-message table with the name and session number 1.
-# TODO: Create a session button for the chatbot section. When clicked, intialises a new row in the chatbot-message database table with the name and session number.
-
-
 # initialisation object for database
 db = SQLAlchemy(app)
 
@@ -67,14 +58,13 @@ class ChatbotMessages(db.Model):
     name = db.Column(db.String, nullable=False)
     owner = db.Column(db.String, nullable=False)
     session = db.Column(db.Integer, nullable=False)
-    # prompt = db.Column(db.String, nullable=False)
     message = db.Column(db.String, nullable=False)
     date = db.Column(db.DateTime, nullable=False)
 
 # initialisation object for socketio library
 socketio = SocketIO(app)
 
-# rooms = {}
+# Dictionary to cache profile pictures for each user. Key: Name, Value: Base64-encoded image
 profile_pictures = {}
 
 
@@ -145,16 +135,18 @@ def home():
             # code=code and name=name to preserve values in form on render_template-initiated reload.
             return render_template("home.html", error="Please enter a valid name (letters, numbers and space only)", code=code, name=name, existing_rooms=existing_rooms)
         
+        # If trying to join a room, but no room code is entered
         if join != False and not code:
             return render_template("home.html", error="Please enter a room code", code=code, name=name, existing_rooms=existing_rooms)
     
-        # room = code
+        # Check for room info in database
         room_info = Rooms.query.filter_by(code=code).first()
         if room_info:
+            # Create a list of members in the room if room info present
             members_list = room_info.members.split(",") if room_info.members else []
+        # If attempting to create a new room
         if create != False:
             code  = generate_unique_code(6)
-            # rooms[room] = {"members":[], "messages":[]}
             new_room = Rooms(code=code , members="")
             db.session.add(new_room)
             db.session.commit()
@@ -174,9 +166,15 @@ def home():
         # Stored persistently between requests
         session["room"] = code
         session["name"] = name
-        initial_chat_session = ChatbotMessages(name="Chatbot", owner=name, session=1, message=f"Started new session: 1", date=datetime.now())
-        db.session.add(initial_chat_session)
-        db.session.commit()
+        
+        # Check if there's already a preexisting initial_chat_session for this user
+        existing_session = ChatbotMessages.query.filter_by(owner=name, session=1).first()
+
+        if not existing_session:
+            # Only create and add the initial_chat_session if it doesn't already exist
+            initial_chat_session = ChatbotMessages(name="Chatbot", owner=name, session=1, message=f"Started new session: 1", date=datetime.now())
+            db.session.add(initial_chat_session)
+            db.session.commit()
         return redirect(url_for("room"))
     
     return render_template("home.html", existing_rooms=existing_rooms)
@@ -200,7 +198,13 @@ def room():
         for message in room_info.messages
     ]
     
-    # Query for chatbot messages in default session
+    # Check and generate identicon for each name in messages_list
+    for message in messages_list:
+        msg_name = message["name"]
+        if msg_name not in profile_pictures:
+            profile_pictures[msg_name] = generate_identicon(msg_name)
+    
+    # Query for chatbot messages in default session (session 1)
     chatbot_messages = ChatbotMessages.query.filter_by(owner=name, session=1).all()
     chatbot_messages_list = [
         {
@@ -212,6 +216,7 @@ def room():
         }
         for msg in chatbot_messages
     ]
+    
     max_session = 1  # Initialize to 1 as default session
     for chatbot_msg in chatbot_messages_list:
         if chatbot_msg["session"] > max_session:
@@ -220,7 +225,7 @@ def room():
                         chatbot_messages=chatbot_messages_list, profile_pictures=profile_pictures, 
                         name=name,max_session=max_session)
 
-
+# Message event occurs when user sends a message
 @socketio.on("message")
 def message(data):
     room = session.get("room")
@@ -244,7 +249,7 @@ def message(data):
     db.session.commit()
     print(f"{session.get('name')} said: {data['data']} in room {room}")
 
-# using the initialisation object for socketio
+# Connect occurs when user enters the room; no authentication required
 @socketio.on("connect")
 def connect(auth):
     room = session.get("room")
@@ -284,10 +289,11 @@ def connect(auth):
     room_info.members = ",".join(members_list)
     
     db.session.commit()
+    # Inform clients that the member list has changed
     emit("memberChange", members_list, to=room)
     print(f"{name} has joined room {room}. Current Members: {members_list}")
     
-
+# Disconnect occurs when user closes the tab or refreshes the page
 @socketio.on("disconnect")
 def disconnect():
     room = session.get("room")
@@ -310,6 +316,7 @@ def disconnect():
     
     
     members_list = []
+    # Remove name from members list of the room (in the database) on disconnect
     if room_info:
         members_list = room_info.members.split(",") if room_info.members else []
         if name in members_list:
@@ -324,11 +331,13 @@ def disconnect():
         #     return
             
     send(content, to=room)
+    # Inform clients that the member list has changed
     emit("memberChange", members_list, to=room) 
 
 
 ###### Chatbot Routes ########
-# TODO
+# For use with AJAX (Asynchronous Javascript and XML) requests
+# Query the database to get the unique session numbers for the user
 @app.route('/get_sessions', methods=['POST'])
 def get_sessions():
     name = request.json.get('name')
@@ -338,26 +347,25 @@ def get_sessions():
     result = jsonify({'sessions': sessions})
     return result
 
-# TODO
+# For use with AJAX requests
+# Query the database to get the chatbot messages for this session and user
 @app.route('/get_session_history', methods=['POST'])
 def get_session_history():
     data = request.json
     name = data.get('name')
     session = data.get('session')
     # Query the database to get the chatbot messages for this session and user
-    # For example:
     messages = ChatbotMessages.query.filter_by(owner=name, session=session).all()
     messages_data = [{"name": m.name, "owner": m.owner, "message": m.message, "date": m.date.strftime("%Y-%m-%d %H:%M:%S"),"profile_picture": profile_pictures.get(m.name, "")} for m in messages]
     return jsonify({'messages': messages_data})
 
-# TODO
+# For use with AJAX requests
+# Self-explanatory; creates a new session for the user
 @app.route('/create_new_session', methods=['POST'])
 def create_new_session():
     data = request.json
     name = data.get('name')
-    
     # Query the database to find the latest session for this name
-    # For example:
     last_session = db.session.query(db.func.max(ChatbotMessages.session)).filter(ChatbotMessages.owner == name).scalar() or 0
     new_session = last_session + 1
     # Create a new row in the chatbot_messages table with this name and last_session + 1
@@ -367,6 +375,8 @@ def create_new_session():
     
     return jsonify({'success': True})
 
+# For use with AJAX requests
+# Occurs when user sends a message (acts as a request) to the chatbot; acknowledges with the same message
 @socketio.on("chatbot_req")
 def chatbot_message(data):
     sid = request.sid
@@ -377,10 +387,11 @@ def chatbot_message(data):
     db.session.add(chatbot_msg)
     db.session.commit()
     emit("chatbot_ack", {"name":name, "session": session_id, "message": message,
-                            "profile_picture": profile_pictures.get(name, ""),
-                            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")},
-                             room=sid)
+                        "profile_picture": profile_pictures.get(name, ""),
+                        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")},
+                        room=sid)
 
+# Also occurs when user sends a message (acts as a request) to the chatbot; responds with a message from an LLM model
 @socketio.on("chatbot_prompt")
 def chatbot_message(data):
     sid = request.sid
@@ -389,9 +400,13 @@ def chatbot_message(data):
     prompt = data["message"]
 
     # For now, we will spoof the chatbot response after 5 seconds
+    ############################
+    # TODO: Replace this with API call, respond using the prompt
+    ############################
     import time
     time.sleep(5)
     response = f"Hello, I am your chatbot. You said: {prompt}"  # Replace this with API call, respond using the prompt
+    ############################
     chatbot_msg = ChatbotMessages(name="Chatbot", owner=name, session=session_id, message=response, date=datetime.now())
     db.session.add(chatbot_msg)
     db.session.commit()
@@ -403,6 +418,6 @@ def chatbot_message(data):
 
 if __name__ == '__main__':
     with app.app_context():
-        # print("creating db")
+        # Create all tables in the database if they don't exist
         db.create_all()
     socketio.run(app, debug=True)

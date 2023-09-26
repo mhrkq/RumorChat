@@ -15,7 +15,7 @@
     </div>
     <div class="members-box">
       <h2>Members</h2>
-      <div class="members" id="members"> test test </div>
+      <div class="members" id="members"></div>
     </div>
   </div>
   <div class="room-box-chatbot">
@@ -75,7 +75,7 @@
   };
 
   
-  // Called multiple times to display the messages
+  // Called multiple times to generate and display the messages
   const createMessage = (name, msg, date, profile_picture) => {
     const content = `
     <div class="text">
@@ -191,7 +191,7 @@
     });
   }
 
-  // For the Chatbot message
+  // Called multiple times to generate and display the Chatbot messages
   const createChatbotMessage = (name, msg, date, profile_picture) => {
       // Create the HTML element here
       const content = `
