@@ -12,6 +12,8 @@ from io import BytesIO
 from hashlib import md5
 import os
 from dotenv import load_dotenv
+import eventlet
+eventlet.monkey_patch()
 
 
 # Load environment variables from the .env file
@@ -391,6 +393,27 @@ def chatbot_message(data):
                         "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")},
                         room=sid)
 
+# Function to simulate the delay for the chatbot response
+def background_task(name, sid, session_id, prompt):
+    with app.app_context():
+        # For now, we will spoof the chatbot response after 5 seconds
+        ############################
+        # TODO: Replace this with API call, respond using the prompt
+        ############################
+        import time
+        time.sleep(5)
+        response = f"Hello, I am your chatbot. You said: {prompt}"  # Replace this with API call, respond using the prompt
+        ############################
+        chatbot_msg = ChatbotMessages(name="Chatbot", owner=name, session=session_id, message=response, date=datetime.now())
+        db.session.add(chatbot_msg)
+        db.session.commit()
+
+        socketio.emit("chatbot_response", {"name":"Chatbot", "session": session_id,
+                                "message": response, "profile_picture": profile_pictures.get("Chatbot", ""),
+                                "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")},
+                                room=sid)
+
+
 # Also occurs when user sends a message (acts as a request) to the chatbot; responds with a message from an LLM model
 @socketio.on("chatbot_prompt")
 def chatbot_message(data):
@@ -399,25 +422,13 @@ def chatbot_message(data):
     session_id = data["session"]
     prompt = data["message"]
 
-    # For now, we will spoof the chatbot response after 5 seconds
-    ############################
-    # TODO: Replace this with API call, respond using the prompt
-    ############################
-    import time
-    time.sleep(5)
-    response = f"Hello, I am your chatbot. You said: {prompt}"  # Replace this with API call, respond using the prompt
-    ############################
-    chatbot_msg = ChatbotMessages(name="Chatbot", owner=name, session=session_id, message=response, date=datetime.now())
-    db.session.add(chatbot_msg)
-    db.session.commit()
-    emit("chatbot_response", {"name":"Chatbot", "session": session_id,
-                            "message": response, "profile_picture": profile_pictures.get("Chatbot", ""),
-                            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")},
-                            room=sid)
+    # Run the background task without blocking
+    socketio.start_background_task(background_task, name, sid, session_id, prompt)
 
 
 if __name__ == '__main__':
     with app.app_context():
         # Create all tables in the database if they don't exist
         db.create_all()
-    socketio.run(app, debug=True)
+    # socketio.run(app, debug=True)
+    eventlet.wsgi.server(eventlet.listen(('0.0.0.0', 5000)), app)
