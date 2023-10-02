@@ -431,4 +431,4 @@ if __name__ == '__main__':
         # Create all tables in the database if they don't exist
         db.create_all()
     # socketio.run(app, debug=True)
-    eventlet.wsgi.server(eventlet.listen(('0.0.0.0', 5000)), app)
+    eventlet.wsgi.server(eventlet.listen(('0.0.0.0', 8080)), app)
