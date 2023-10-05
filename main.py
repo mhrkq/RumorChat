@@ -393,17 +393,42 @@ def chatbot_message(data):
                         "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")},
                         room=sid)
 
+# Function to retrieve the last k messages
+def retrieve_last_k_msg(k, room_code):
+    # Querying for the messages excluding those sent by "Room"
+    last_k_messages = Messages.query.filter_by(room_code=room_code).filter(Messages.name != "Room").order_by(Messages.date.desc()).limit(k).all()
+    
+    # Constructing the list of dictionaries
+    messages_list = [{
+        "name": msg.name,
+        "message": msg.message,
+        "date": msg.date.strftime("%Y-%m-%d %H:%M:%S")
+    } for msg in reversed(last_k_messages)] # reversing to get the oldest message first
+    
+    return messages_list
+
 # Function to simulate the delay for the chatbot response
-def background_task(name, sid, session_id, prompt):
+def background_task(name, sid, session_id, room_code, prompt):
     with app.app_context():
+        
+         # Retrieving the last k messages; for example, let's take k as 5
+        last_k_msgs = retrieve_last_k_msg(5, room_code)
+        
+        # Prepending the last k messages to the prompt with the desired format
+        prepended_msg = '\n'.join([f"{msg['name']}: {msg['message']}" for msg in last_k_msgs])
+        full_prompt = prepended_msg + "\n" + "Your latest prompt: " + prompt
+        
+        
         # For now, we will spoof the chatbot response after 5 seconds
         ############################
         # TODO: Replace this with API call, respond using the prompt
         ############################
         import time
         time.sleep(5)
-        response = f"Hello, I am your chatbot. You said: {prompt}"  # Replace this with API call, respond using the prompt
+        response = f"Hello, I am your chatbot. Here is your full prompt: \n {full_prompt}"  # Replace this with API call, respond using the prompt
         ############################
+        # Convert newline characters to <br> tags for proper rendering in HTML
+        response = response.replace('\n', '<br>')
         chatbot_msg = ChatbotMessages(name="Chatbot", owner=name, session=session_id, message=response, date=datetime.now())
         db.session.add(chatbot_msg)
         db.session.commit()
@@ -414,6 +439,7 @@ def background_task(name, sid, session_id, prompt):
                                 room=sid)
 
 
+
 # Also occurs when user sends a message (acts as a request) to the chatbot; responds with a message from an LLM model
 @socketio.on("chatbot_prompt")
 def chatbot_message(data):
@@ -421,9 +447,10 @@ def chatbot_message(data):
     name = session.get("name")
     session_id = data["session"]
     prompt = data["message"]
+    room = session.get("room")
 
     # Run the background task without blocking
-    socketio.start_background_task(background_task, name, sid, session_id, prompt)
+    socketio.start_background_task(background_task, name, sid, session_id, room, prompt)
 
 
 if __name__ == '__main__':
