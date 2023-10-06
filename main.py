@@ -568,10 +568,10 @@ def background_task(name, sid, session_id, room_code, prompt):
                 results = response.json()['results']
                 chatbot_reply = results[0]['history']['visible'][-1][1]
             else:
-                chatbot_reply = f"Sorry, I couldn't process your request. You said: {prompt}"
+                chatbot_reply = f"Sorry, I couldn't process your request (likely due to an API connection error). You said: {prompt}"
         except Exception as e:
             print("Exception occured: ", e)
-            chatbot_reply = f"Sorry, I couldn't process your request. You said: {prompt}"
+            chatbot_reply = f"Sorry, I couldn't process your request (likely due to an API connection error). You said: {prompt}"
         
         ############################
         response = chatbot_reply
