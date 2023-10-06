@@ -77,6 +77,8 @@
   
   // Called multiple times to generate and display the messages
   const createMessage = (name, msg, date, profile_picture) => {
+    // Replace all newlines with <br> tags
+    msg = msg.replace(/\n/g, "<br>");
     const content = `
     <div class="text">
       <div>
@@ -193,6 +195,8 @@
 
   // Called multiple times to generate and display the Chatbot messages
   const createChatbotMessage = (name, msg, date, profile_picture) => {
+      // Replace all newlines with <br> tags
+      msg = msg.replace(/\n/g, "<br>");
       // Create the HTML element here
       const content = `
       <div class="text">

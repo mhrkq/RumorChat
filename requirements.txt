@@ -1,4 +1,4 @@
-﻿asttokens==2.2.1
+﻿﻿asttokens==2.2.1
 backcall==0.2.0
 bidict==0.22.1
 blinker==1.6.2
@@ -40,6 +40,7 @@ python-engineio==4.5.1
 python-socketio==5.8.0
 pywin32==306
 pyzmq==25.1.1
+requests==2.31.0
 six==1.16.0
 SQLAlchemy==2.0.20
 SQLAlchemy-Utils==0.41.1
