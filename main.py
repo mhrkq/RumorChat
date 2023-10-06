@@ -560,14 +560,17 @@ def background_task(name, sid, session_id, room_code, prompt):
         'stopping_strings': []
         }
         
-        
-        response = requests.post(CHATBOT_URI, json=request_data)
-        
-        # Check if the response is successful and extract the chatbot's reply
-        if response.status_code == 200:
-            results = response.json()['results']
-            chatbot_reply = results[0]['history']['visible'][-1][1]
-        else:
+        try:
+            response = requests.post(CHATBOT_URI, json=request_data)
+            
+            # Check if the response is successful and extract the chatbot's reply
+            if response.status_code == 200:
+                results = response.json()['results']
+                chatbot_reply = results[0]['history']['visible'][-1][1]
+            else:
+                chatbot_reply = f"Sorry, I couldn't process your request. You said: {prompt}"
+        except Exception as e:
+            print("Exception occured: ", e)
             chatbot_reply = f"Sorry, I couldn't process your request. You said: {prompt}"
         
         ############################
