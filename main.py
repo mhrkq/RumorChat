@@ -479,7 +479,7 @@ def background_task(name, sid, session_id, room_code, prompt):
             print("No chabot history found")
             # Retrieving the last k messages; for example, let's take k as 5
             last_k_msgs = retrieve_last_k_msg(k, room_code)
-            full_prompt += f"Context: Here are the last {k} messages from various users in the public chatroom. (Note that my username is '{name}'): \n"
+            full_prompt += f"Context: Here are the last {len(last_k_msgs)} messages from various users in the public chatroom. (Note that my username is '{name}'): \n"
             # Prepending the last k messages to the prompt with the desired format
             prepended_msg = '\n'.join([f"{msg['name']}: {msg['message']}" for msg in last_k_msgs])
             full_prompt += prepended_msg + "\n"
@@ -604,4 +604,4 @@ if __name__ == '__main__':
         # Create all tables in the database if they don't exist
         db.create_all()
     # socketio.run(app, debug=True)
-    eventlet.wsgi.server(eventlet.listen(('0.0.0.0', 8080)), app, debug=True)
+    eventlet.wsgi.server(eventlet.listen(('127.0.0.1', 8080)), app, debug=True)
