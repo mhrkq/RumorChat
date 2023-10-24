@@ -14,6 +14,18 @@ import os
 from dotenv import load_dotenv
 import eventlet
 import requests
+import argparse
+from time import time
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Run Flask App")
+    parser.add_argument("--logging", action="store_true",
+                        help="Enable logging print statements")
+    return parser.parse_args()
+
+args = parse_arguments()
+LOGGING = args.logging
+
 eventlet.monkey_patch()
 
 
@@ -122,14 +134,20 @@ profile_pictures["Chatbot"] = generate_identicon("Chatbot")
 # Home Page
 @app.route("/", methods=["GET", "POST"])
 def home():
+    if LOGGING:
+        start_time = time()  # Start time of request
+        print(f"Time started for home()")
     # Clear session when user goes to home page
-    # so that they can't
-    # navigate directly to chat page without entering name and room code
+    # so that they can't navigate directly to chat page without entering name and room code
     session.clear()
     # Query the database for all room codes
     existing_rooms = Rooms.query.with_entities(Rooms.code).all()
     # Convert query results to a list of strings
     existing_rooms = [room.code for room in existing_rooms]
+    
+    if LOGGING:
+        print(f"Time taken to query existing rooms in home(): {time() - start_time} seconds")
+        start_time = time() 
 
     if request.method == "POST":
         # attempt to grab values from form; returns None if doesn't exist
@@ -150,6 +168,9 @@ def home():
 
         # Check for room info in database
         room_info = Rooms.query.filter_by(code=code).first()
+        if LOGGING:
+            print(f"Time taken to query room info in home(): {time() - start_time} seconds")
+            start_time = time() 
         if room_info:
             # Create a list of members in the room if room info present
             members_list = room_info.members.split(",") if room_info.members else []
@@ -159,6 +180,9 @@ def home():
             new_room = Rooms(code=code , members="")
             db.session.add(new_room)
             db.session.commit()
+            if LOGGING:
+                print(f"Time taken to commit new room in home(): {time() - start_time} seconds")
+                start_time = time() 
 
         # if not create, we assume they are trying to join a room
 
@@ -178,23 +202,36 @@ def home():
 
         # Check if there's already a preexisting initial_chat_session for this user
         existing_session = ChatbotMessages.query.filter_by(owner=name, session=1).first()
+        if LOGGING:
+            print(f"Time taken to query existing session in home(): {time() - start_time} seconds")
+            start_time = time() 
 
         if not existing_session:
             # Only create and add the initial_chat_session if it doesn't already exist
             initial_chat_session = ChatbotMessages(name="Chatbot", owner=name, session=1, message=f"Started new session: 1", date=datetime.now())
             db.session.add(initial_chat_session)
             db.session.commit()
+            if LOGGING:
+                print(f"Time taken to commit initial chat session in home(): {time() - start_time} seconds")
+                start_time = time() 
         return redirect(url_for("room"))
-
+    if LOGGING:
+        print(f"Total time taken to complete home() function: {time() - start_time} seconds")
     return render_template("home.html", existing_rooms=existing_rooms)
 
 @app.route("/room")
 def room():
+    if LOGGING:
+        start_time = time()  # Start time of request
+        print(f"Time started for room()")
     room = session.get("room")
     name = session.get("name")
     # Ensure user can only go to /room route if they either generated a new room
     # or joined an existing room from the home page
     room_info = Rooms.query.filter_by(code=room).first()
+    if LOGGING:
+        print(f"Time taken to query room_info in room(): {time() - start_time} seconds")
+        start_time = time() 
     if room is None or session.get("name") is None or room_info is None:
         return redirect(url_for("home"))
     # Extracting messages on room info from database
@@ -212,6 +249,9 @@ def room():
         msg_name = message["name"]
         if msg_name not in profile_pictures:
             profile_pictures[msg_name] = generate_identicon(msg_name)
+    if LOGGING:
+        print(f"Time taken to generate_identicon in room(): {time() - start_time} seconds")
+        start_time = time() 
 
     # Query for chatbot messages in default session (session 1)
     chatbot_messages = ChatbotMessages.query.filter_by(owner=name, session=1).all()
@@ -225,11 +265,17 @@ def room():
         }
         for msg in chatbot_messages
     ]
+    
+    if LOGGING:
+        print(f"Time taken to query and filter ChatbotMessages in room(): {time() - start_time} seconds")
+        start_time = time() 
 
     max_session = 1  # Initialize to 1 as default session
     for chatbot_msg in chatbot_messages_list:
         if chatbot_msg["session"] > max_session:
             max_session = chatbot_msg["session"]
+    if LOGGING:
+        print(f"Time taken to finish room(): {time() - start_time} seconds")
     return render_template("room.html",code=room, messages=messages_list,
                         chatbot_messages=chatbot_messages_list, profile_pictures=profile_pictures,
                         name=name,max_session=max_session)
@@ -237,8 +283,14 @@ def room():
 # Message event occurs when user sends a message
 @socketio.on("message")
 def message(data):
+    if LOGGING:
+        start_time = time()  # Start time of request
+        print(f"Time started for message()")
     room = session.get("room")
     room_info = Rooms.query.filter_by(code=room).first()
+    if LOGGING:
+        print(f"Time taken to query room info in message(): {time() - start_time} seconds")
+        start_time = time() 
     if room_info is None:
         return
 
@@ -251,16 +303,25 @@ def message(data):
 
     # On receiving data from a client, send it to all clients in the room
     send(content, to=room)
+    if LOGGING:
+        print(f"Time taken to send data to all clients message(): {time() - start_time} seconds")
+        start_time = time() 
 
     # Save message to room's messages history
     msg = Messages(room_code=room, name=content["name"], message=content["message"], date=content["date"])
     db.session.add(msg)
     db.session.commit()
+    if LOGGING:
+        print(f"Time taken to commit message to history in message(): {time() - start_time} seconds")
+        start_time = time() 
     print(f"{session.get('name')} said: {data['data']} in room {room}")
 
 # Connect occurs when user enters the room; no authentication required
 @socketio.on("connect")
 def connect(auth):
+    if LOGGING:
+        start_time = time()  # Start time of request
+        print(f"Time started for connect()")
     room = session.get("room")
     name = session.get("name")
 
@@ -269,6 +330,9 @@ def connect(auth):
         return
 
     room_info = Rooms.query.filter_by(code=room).first()
+    if LOGGING:
+        print(f"Time taken to query existing rooms in connect(): {time() - start_time} seconds")
+        start_time = time() 
     if room_info is None:
         # Leave room as it shouldn't exist
         leave_room(room)
@@ -285,31 +349,54 @@ def connect(auth):
         "profile_picture": profile_pictures.get("Room", "")
     }
     send(content, to=room)
+    if LOGGING:
+        print(f"Time taken to generate_identicon, join_room and send content in connect(): {time() - start_time} seconds")
+        start_time = time() 
 
     # Save connect message to room's messages history
     msg = Messages(room_code=room, name=content["name"], message=content["message"], date=content["date"])
     db.session.add(msg)
     db.session.commit()
+    if LOGGING:
+        print(f"Time taken to commit messages to history in connect(): {time() - start_time} seconds")
+        start_time = time() 
 
     members_list = room_info.members.split(",") if room_info.members else []
     # Add name to members list if name doesn't there exist; prevents duplicate names in room upon refresh from same session
     if name not in members_list:
         members_list.append(name)
     room_info.members = ",".join(members_list)
+    if LOGGING:
+        print(f"Time taken to add members to room_info in connect(): {time() - start_time} seconds")
+        start_time = time() 
 
     db.session.commit()
+    
+    if LOGGING:
+        print(f"Time taken to commit added members to room_info in connect(): {time() - start_time} seconds")
+        start_time = time() 
+    
     # Inform clients that the member list has changed
     emit("memberChange", members_list, to=room)
+    
+    if LOGGING:
+        print(f"Time taken to commit added members to room_info in connect(): {time() - start_time} seconds")
     print(f"{name} has joined room {room}. Current Members: {members_list}")
 
 # Disconnect occurs when user closes the tab or refreshes the page
 @socketio.on("disconnect")
 def disconnect():
+    if LOGGING:
+        start_time = time()  # Start time of request
+        print(f"Time started for disconnect()")
     room = session.get("room")
     name = session.get("name")
     leave_room(room)
     print(f"{name} has left room {room}")
     room_info = Rooms.query.filter_by(code=room).first()
+    if LOGGING:
+        print(f"Time taken to leave room and query + filter room_info in disconnect(): {time() - start_time} seconds")
+        start_time = time() 
 
     content = {
         "name":"Room",
@@ -322,6 +409,9 @@ def disconnect():
     msg = Messages(room_code=room, name=content["name"], message=content["message"], date=content["date"])
     db.session.add(msg)
     db.session.commit()
+    if LOGGING:
+        print(f"Time taken to save and commit disconnect message in disconnect(): {time() - start_time} seconds")
+        start_time = time() 
 
 
     members_list = []
@@ -332,55 +422,77 @@ def disconnect():
             members_list.remove(name)
         room_info.members = ",".join(members_list)
         db.session.commit()
-
-        # Delete room if no members left (REMOVED FOR NOW; LET'S PERSIST ROOMS)
-        # if not members_list:
-        #     db.session.delete(room_info)
-        #     db.session.commit()
-        #     return
+        if LOGGING:
+            print(f"Time taken to remove members from members list and commit change in disconnect(): {time() - start_time} seconds")
+            start_time = time() 
 
     send(content, to=room)
     # Inform clients that the member list has changed
     emit("memberChange", members_list, to=room)
-
+    if LOGGING:
+        print(f"Time taken to send data, emit new members list and conclude disconnect(): {time() - start_time} seconds")
 
 ###### Chatbot Routes ########
 # For use with AJAX (Asynchronous Javascript and XML) requests
 # Query the database to get the unique session numbers for the user
 @app.route('/get_sessions', methods=['POST'])
 def get_sessions():
+    if LOGGING:
+        start_time = time()  # Start time of request
+        print(f"Time started for get_sessions()")
     name = request.json.get('name')
     # Query the database to get the unique session numbers for the user
     sessions = db.session.query(ChatbotMessages.session).filter(ChatbotMessages.owner == name).distinct().all()
+    if LOGGING:
+        print(f"Time taken to query sessions in get_sessions(): {time() - start_time} seconds")
+        start_time = time() 
     sessions = [s[0] for s in sessions]  # Flatten the list
     result = jsonify({'sessions': sessions})
+    if LOGGING:
+        print(f"Time taken to conclude get_sessions(): {time() - start_time} seconds")
     return result
 
 # For use with AJAX requests
 # Query the database to get the chatbot messages for this session and user
 @app.route('/get_session_history', methods=['POST'])
 def get_session_history():
+    if LOGGING:
+        start_time = time()  # Start time of request
+        print(f"Time started for get_session_history()")
     data = request.json
     name = data.get('name')
     session = data.get('session')
     # Query the database to get the chatbot messages for this session and user
     messages = ChatbotMessages.query.filter_by(owner=name, session=session).all()
+    if LOGGING:
+        print(f"Time taken to query ChatbotMessages in get_session_history(): {time() - start_time} seconds")
+        start_time = time() 
     messages_data = [{"name": m.name, "owner": m.owner, "message": m.message, "date": m.date.strftime("%Y-%m-%d %H:%M:%S"),"profile_picture": profile_pictures.get(m.name, "")} for m in messages]
+    messages = ChatbotMessages.query.filter_by(owner=name, session=session).all()
+    if LOGGING:
+        print(f"Time taken to conclude get_session_history(): {time() - start_time} seconds")
     return jsonify({'messages': messages_data})
 
 # For use with AJAX requests
 # Self-explanatory; creates a new session for the user
 @app.route('/create_new_session', methods=['POST'])
 def create_new_session():
+    if LOGGING:
+        start_time = time()  # Start time of request
+        print(f"Time started for create_new_session()")
     data = request.json
     name = data.get('name')
     # Query the database to find the latest session for this name
     last_session = db.session.query(db.func.max(ChatbotMessages.session)).filter(ChatbotMessages.owner == name).scalar() or 0
     new_session = last_session + 1
+    if LOGGING:
+        print(f"Time taken to query the database to find the latest session for the name: {name} in create_new_session(): {time() - start_time} seconds")
     # Create a new row in the chatbot_messages table with this name and last_session + 1
     new_session = ChatbotMessages(name="Chatbot", owner=name, session=new_session, message=f"Started new session: {new_session}", date=datetime.now())
     db.session.add(new_session)
     db.session.commit()
+    if LOGGING:
+        print(f"Time taken to add, commit new session with ChatbotMessages and conclude create_new_session(): {time() - start_time} seconds")
 
     return jsonify({'success': True})
 
@@ -409,7 +521,6 @@ def chatbot_message(data):
     chatbot_msg = ChatbotMessages(name=name, owner=name, session=session_id, message=message, date=datetime.now())
     db.session.add(chatbot_msg)
     db.session.commit()
-    print("succesfully commited on chatbot_req")
     emit("chatbot_ack", {"name":name, "session": session_id, "message": message,
                         "profile_picture": profile_pictures.get(name, ""),
                         "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")},
@@ -465,6 +576,8 @@ def form_message_pairs(chatbot_history):
 
 # Function to simulate the delay for the chatbot response
 def background_task(name, sid, session_id, room_code, prompt):
+    print(f"Started timing background task for {name}'s chatbot request")
+    start_time = time() 
     with app.app_context():
         # k is the number of messages to retrieve
 
@@ -501,7 +614,7 @@ def background_task(name, sid, session_id, room_code, prompt):
         # import time
         # time.sleep(5)
         # response = f"Hello, I am your chatbot. Here is your full prompt: \n {full_prompt}"  # Replace this with API call, respond using the prompt
-        print(f"sending request to chatbot api: {full_prompt}")
+        print(f"Sending {name}'s request to chatbot api: {full_prompt}")
         request_data = {
         'user_input': full_prompt,
         'max_new_tokens': 500,
@@ -584,8 +697,7 @@ def background_task(name, sid, session_id, room_code, prompt):
                                 "message": response, "profile_picture": profile_pictures.get("Chatbot", ""),
                                 "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")},
                                 room=sid)
-
-
+    print(f"Time taken to finish chatbot request: {time() - start_time} seconds")
 
 # Also occurs when user sends a message (acts as a request) to the chatbot; responds with a message from an LLM model
 @socketio.on("chatbot_prompt")
@@ -601,6 +713,10 @@ def chatbot_message(data):
 
 
 if __name__ == '__main__':
+    if LOGGING:
+        print("Logging enabled")
+    else:
+        print("Logging disabled")
     with app.app_context():
         # Create all tables in the database if they don't exist
         db.create_all()
