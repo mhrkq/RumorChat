@@ -26,7 +26,7 @@ DB_PASSWORD = os.getenv("DB_PASSWORD")
 
 DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@localhost/{DB_NAME}"
 
-CHATBOT_HOST = 'localhost:5000'
+CHATBOT_HOST = '172.17.0.1:6000'
 CHATBOT_URI = f'http://{CHATBOT_HOST}/api/v1/chat'
 
 # k is the number of messages to retrieve on each new session
@@ -61,7 +61,7 @@ class Messages(db.Model):
     name = db.Column(db.String, nullable=False)
     message = db.Column(db.String, nullable=False)
     date = db.Column(db.DateTime, nullable=False)
-    
+
 class ChatbotMessages(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String, nullable=False)
@@ -83,7 +83,7 @@ def generate_unique_code(length):
         code = ""
         for _ in range(length):
             code += random.choice(ascii_uppercase + digits)
-        # return code if indeed unique   
+        # return code if indeed unique
         room_info = Rooms.query.filter_by(code=code).first()
         if room_info is None:
             return code
@@ -138,16 +138,16 @@ def home():
         # False if doesn't exist
         join = request.form.get("join", False)
         create = request.form.get("create", False)
-        
+
         # Check if name contains symbols that are not typically safe
         if not name or not all(char in ascii_letters + digits + " " for char in name):
             # code=code and name=name to preserve values in form on render_template-initiated reload.
             return render_template("home.html", error="Please enter a valid name (letters, numbers and space only)", code=code, name=name, existing_rooms=existing_rooms)
-        
+
         # If trying to join a room, but no room code is entered
         if join != False and not code:
             return render_template("home.html", error="Please enter a room code", code=code, name=name, existing_rooms=existing_rooms)
-    
+
         # Check for room info in database
         room_info = Rooms.query.filter_by(code=code).first()
         if room_info:
@@ -159,10 +159,10 @@ def home():
             new_room = Rooms(code=code , members="")
             db.session.add(new_room)
             db.session.commit()
-            
+
         # if not create, we assume they are trying to join a room
-        
-        
+
+
         # Refuse to join if room doesn't exist or name already exists in room
         elif room_info is None:
             return render_template("home.html", error="Room code does not exist", code=code, name=name, existing_rooms=existing_rooms)
@@ -175,7 +175,7 @@ def home():
         # Stored persistently between requests
         session["room"] = code
         session["name"] = name
-        
+
         # Check if there's already a preexisting initial_chat_session for this user
         existing_session = ChatbotMessages.query.filter_by(owner=name, session=1).first()
 
@@ -185,7 +185,7 @@ def home():
             db.session.add(initial_chat_session)
             db.session.commit()
         return redirect(url_for("room"))
-    
+
     return render_template("home.html", existing_rooms=existing_rooms)
 
 @app.route("/room")
@@ -206,13 +206,13 @@ def room():
         }
         for message in room_info.messages
     ]
-    
+
     # Check and generate identicon for each name in messages_list
     for message in messages_list:
         msg_name = message["name"]
         if msg_name not in profile_pictures:
             profile_pictures[msg_name] = generate_identicon(msg_name)
-    
+
     # Query for chatbot messages in default session (session 1)
     chatbot_messages = ChatbotMessages.query.filter_by(owner=name, session=1).all()
     chatbot_messages_list = [
@@ -225,13 +225,13 @@ def room():
         }
         for msg in chatbot_messages
     ]
-    
+
     max_session = 1  # Initialize to 1 as default session
     for chatbot_msg in chatbot_messages_list:
         if chatbot_msg["session"] > max_session:
             max_session = chatbot_msg["session"]
     return render_template("room.html",code=room, messages=messages_list,
-                        chatbot_messages=chatbot_messages_list, profile_pictures=profile_pictures, 
+                        chatbot_messages=chatbot_messages_list, profile_pictures=profile_pictures,
                         name=name,max_session=max_session)
 
 # Message event occurs when user sends a message
@@ -241,17 +241,17 @@ def message(data):
     room_info = Rooms.query.filter_by(code=room).first()
     if room_info is None:
         return
-    
+
     content = {
         "name":session.get("name"),
         "message":data["data"],
         "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "profile_picture": profile_pictures.get(session.get("name"), "")
     }
-    
+
     # On receiving data from a client, send it to all clients in the room
     send(content, to=room)
-    
+
     # Save message to room's messages history
     msg = Messages(room_code=room, name=content["name"], message=content["message"], date=content["date"])
     db.session.add(msg)
@@ -263,11 +263,11 @@ def message(data):
 def connect(auth):
     room = session.get("room")
     name = session.get("name")
-    
+
     # Exit if the session is missing room or name
     if not room or not name:
         return
-    
+
     room_info = Rooms.query.filter_by(code=room).first()
     if room_info is None:
         # Leave room as it shouldn't exist
@@ -276,7 +276,7 @@ def connect(auth):
 
     if name not in profile_pictures:
         profile_pictures[name] = generate_identicon(name)
-        
+
     join_room(room)
     content = {
         "name":"Room",
@@ -285,45 +285,45 @@ def connect(auth):
         "profile_picture": profile_pictures.get("Room", "")
     }
     send(content, to=room)
-    
+
     # Save connect message to room's messages history
     msg = Messages(room_code=room, name=content["name"], message=content["message"], date=content["date"])
     db.session.add(msg)
     db.session.commit()
-    
+
     members_list = room_info.members.split(",") if room_info.members else []
     # Add name to members list if name doesn't there exist; prevents duplicate names in room upon refresh from same session
     if name not in members_list:
         members_list.append(name)
     room_info.members = ",".join(members_list)
-    
+
     db.session.commit()
     # Inform clients that the member list has changed
     emit("memberChange", members_list, to=room)
     print(f"{name} has joined room {room}. Current Members: {members_list}")
-    
+
 # Disconnect occurs when user closes the tab or refreshes the page
 @socketio.on("disconnect")
 def disconnect():
     room = session.get("room")
     name = session.get("name")
     leave_room(room)
-    print(f"{name} has left room {room}") 
+    print(f"{name} has left room {room}")
     room_info = Rooms.query.filter_by(code=room).first()
-    
+
     content = {
         "name":"Room",
         "message":f"{name} has left the room",
         "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "profile_picture": profile_pictures.get("Room", "")
     }
-    
+
     # Save disconnect message to room's messages history
     msg = Messages(room_code=room, name=content["name"], message=content["message"], date=content["date"])
     db.session.add(msg)
     db.session.commit()
-    
-    
+
+
     members_list = []
     # Remove name from members list of the room (in the database) on disconnect
     if room_info:
@@ -332,16 +332,16 @@ def disconnect():
             members_list.remove(name)
         room_info.members = ",".join(members_list)
         db.session.commit()
-        
+
         # Delete room if no members left (REMOVED FOR NOW; LET'S PERSIST ROOMS)
         # if not members_list:
         #     db.session.delete(room_info)
         #     db.session.commit()
         #     return
-            
+
     send(content, to=room)
     # Inform clients that the member list has changed
-    emit("memberChange", members_list, to=room) 
+    emit("memberChange", members_list, to=room)
 
 
 ###### Chatbot Routes ########
@@ -381,7 +381,7 @@ def create_new_session():
     new_session = ChatbotMessages(name="Chatbot", owner=name, session=new_session, message=f"Started new session: {new_session}", date=datetime.now())
     db.session.add(new_session)
     db.session.commit()
-    
+
     return jsonify({'success': True})
 
 # For use with AJAX requests
@@ -404,8 +404,8 @@ def chatbot_message(data):
         full_prompt += prepended_msg + "\n"
         full_prompt += f"Given the above context, follow these instructions: {message}"
         message = full_prompt
-    
-    
+
+
     chatbot_msg = ChatbotMessages(name=name, owner=name, session=session_id, message=message, date=datetime.now())
     db.session.add(chatbot_msg)
     db.session.commit()
@@ -427,13 +427,13 @@ def retrieve_last_k_msg(k, room_code):
         "message": msg.message,
         "date": msg.date.strftime("%Y-%m-%d %H:%M:%S")
     } for msg in reversed(last_k_messages)] # reversing to get the oldest message first
-    
+
     return messages_list
 
 def retrieve_chatbot_history(owner, session_id):
     # Querying for the messages from the Chatbot for a given session id
     chatbot_messages = ChatbotMessages.query.filter_by(owner=owner, session=session_id).order_by(ChatbotMessages.date.asc()).all()
-    
+
     # If there's only one message in that session, return None
     if len(chatbot_messages) <= 1:
         return None
@@ -444,34 +444,34 @@ def retrieve_chatbot_history(owner, session_id):
         "message": msg.message,
         "date": msg.date.strftime("%Y-%m-%d %H:%M:%S")
     } for msg in chatbot_messages[1:]]  # starts from the third message
-    
+
     return chatbot_messages_list
 
 def form_message_pairs(chatbot_history):
     if not chatbot_history:
         return []
-    
+
     history_visible = []
     user_message = None
-    
+
     for msg in chatbot_history:
         if msg['name'] != "Chatbot" and user_message is None:  # Capturing the user message
             user_message = msg['message']
         elif msg['name'] == "Chatbot" and user_message:  # Pairing it with the chatbot response
             history_visible.append([user_message, msg['message']])
             user_message = None  # Resetting for the next user message
-    
+
     return history_visible
 
 # Function to simulate the delay for the chatbot response
 def background_task(name, sid, session_id, room_code, prompt):
     with app.app_context():
         # k is the number of messages to retrieve
-        
+
         full_prompt = ""
-        history = {'internal': [], 'visible': []}    
+        history = {'internal': [], 'visible': []}
         chatbot_history = retrieve_chatbot_history(name, session_id)
-        
+
         # TODO: Copy the retrieval of the chatbot history to the chatbot_req event handler as well to inform the user of what
         # information the chatbot is consuming for that (newly created) session.
         # Subsequent messages after the first (in a particular session) will retrieve the entire chatbot session message history from the database.
@@ -493,7 +493,7 @@ def background_task(name, sid, session_id, room_code, prompt):
             # full_prompt += chatbot_history_msg + "\n"
             # full_prompt +=  f"Here is the user's ({name}'s) latest prompt: {prompt}"
             full_prompt = prompt
-        
+
         # For now, we will spoof the chatbot response after 5 seconds
         ############################
         # TODO: Replace this with API call, respond using the prompt
@@ -559,10 +559,10 @@ def background_task(name, sid, session_id, room_code, prompt):
         'skip_special_tokens': True,
         'stopping_strings': []
         }
-        
+
         try:
             response = requests.post(CHATBOT_URI, json=request_data)
-            
+
             # Check if the response is successful and extract the chatbot's reply
             if response.status_code == 200:
                 results = response.json()['results']
@@ -573,7 +573,7 @@ def background_task(name, sid, session_id, room_code, prompt):
         except Exception as e:
             print("Exception occured: ", e)
             chatbot_reply = f"Sorry, I couldn't process your request due to an Exception. You said: {prompt}"
-        
+
         ############################
         response = chatbot_reply
         chatbot_msg = ChatbotMessages(name="Chatbot", owner=name, session=session_id, message=response, date=datetime.now())
