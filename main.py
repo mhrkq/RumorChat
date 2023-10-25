@@ -1,3 +1,4 @@
+import eventlet
 eventlet.monkey_patch()
 
 from flask import Flask, render_template, request, session, redirect, url_for, jsonify
@@ -14,7 +15,6 @@ from io import BytesIO
 from hashlib import md5
 import os
 from dotenv import load_dotenv
-import eventlet
 import requests
 import argparse
 from time import time
