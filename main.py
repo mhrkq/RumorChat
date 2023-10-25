@@ -1,9 +1,10 @@
 import eventlet
 eventlet.monkey_patch()
 
-from flask_cors import CORS
+import logging
+logging.basicConfig(level=logging.DEBUG)
 
-# Add this after initializing your app
+from flask_cors import CORS
 
 
 from flask import Flask, render_template, request, session, redirect, url_for, jsonify
@@ -90,7 +91,7 @@ class ChatbotMessages(db.Model):
     date = db.Column(db.DateTime, nullable=False)
 
 # initialisation object for socketio library
-socketio = SocketIO(app)
+socketio = SocketIO(app , async_mode='eventlet')
 
 # Dictionary to cache profile pictures for each user. Key: Name, Value: Base64-encoded image
 profile_pictures = {}
@@ -727,5 +728,5 @@ if __name__ == '__main__':
     with app.app_context():
         # Create all tables in the database if they don't exist
         db.create_all()
-    # socketio.run(app, debug=True)
-    eventlet.wsgi.server(eventlet.listen(('0.0.0.0', 8080)), app, debug=True)
+    # eventlet.wsgi.server(eventlet.listen(('0.0.0.0', 8080)), app, debug=True)
+    socketio.run(app, host='0.0.0.0', port=8080, debug=True)
