@@ -1,3 +1,5 @@
+eventlet.monkey_patch()
+
 from flask import Flask, render_template, request, session, redirect, url_for, jsonify
 from flask_socketio import SocketIO, emit, join_room, leave_room, send
 import random
@@ -26,7 +28,7 @@ def parse_arguments():
 args = parse_arguments()
 LOGGING = args.logging
 
-eventlet.monkey_patch()
+
 
 
 # Load environment variables from the .env file
