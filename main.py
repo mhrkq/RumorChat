@@ -1,6 +1,11 @@
 import eventlet
 eventlet.monkey_patch()
 
+from flask_cors import CORS
+
+# Add this after initializing your app
+
+
 from flask import Flask, render_template, request, session, redirect, url_for, jsonify
 from flask_socketio import SocketIO, emit, join_room, leave_room, send
 import random
@@ -47,7 +52,7 @@ CHATBOT_URI = f'http://{CHATBOT_HOST}/api/v1/chat'
 k = 5
 
 app = Flask(__name__)
-
+CORS(app)
 
 engine = create_engine(DATABASE_URL)
 
