@@ -24,6 +24,8 @@ from dotenv import load_dotenv
 import requests
 import argparse
 from time import time
+from collections import defaultdict
+from datetime import datetime, timedelta
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Run Flask App")
@@ -96,6 +98,8 @@ socketio = SocketIO(app , async_mode='eventlet')
 # Dictionary to cache profile pictures for each user. Key: Name, Value: Base64-encoded image
 profile_pictures = {}
 
+# To track the last heartbeat from each member in each room
+last_heartbeat = defaultdict(dict)
 
 ###### Utility Functions ########
 def generate_unique_code(length):
@@ -282,6 +286,8 @@ def room():
     for chatbot_msg in chatbot_messages_list:
         if chatbot_msg["session"] > max_session:
             max_session = chatbot_msg["session"]
+            
+    remove_inactive_members_from_db(room)
     if LOGGING:
         print(f"Time taken to finish room(): {time() - start_time} seconds")
     return render_template("room.html",code=room, messages=messages_list,
@@ -718,6 +724,84 @@ def chatbot_message(data):
 
     # Run the background task without blocking
     socketio.start_background_task(background_task, name, sid, session_id, room, prompt)
+
+#################################
+# For cleanups of inactive members in active rooms
+
+
+@socketio.on('heartbeat')
+def heartbeat(data):
+    room = data['room']
+    name = session.get('name')
+    
+    # Update the last heartbeat time
+    last_heartbeat[room][name] = datetime.now()
+
+def cleanup_inactive_members():
+    print("Cleanup task started")
+    while True:
+        current_time = datetime.now()
+        
+        for room, members in last_heartbeat.items():
+            for member, last_time in list(members.items()):
+                if (current_time - last_time) > timedelta(minutes=1):
+                    # This member has been inactive for more than a minute
+                    room_info = Rooms.query.filter_by(code=room).first()
+                    if room_info and member in room_info.members.split(","):
+                        # Remove member from members list and commit
+                        members_list = room_info.members.split(",")
+                        members_list.remove(member)
+                        room_info.members = ",".join(members_list)
+                        db.session.commit()
+
+                        # Notify other members
+                        content = {
+                            "name": "Room",
+                            "message": f"{member} has been removed due to inactivity",
+                            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            "profile_picture": profile_pictures.get("Room", "")
+                        }
+                        send(content, to=room)
+                        emit("memberChange", members_list, to=room)
+                    # Remove the member from our tracking dict
+                    del last_heartbeat[room][member]
+                    print(f"Removed {member} from {room} due to inactivity")
+        
+        # Sleep for a minute before checking again
+        eventlet.sleep(60)
+        
+def remove_inactive_members_from_db(room_code):
+    current_time = datetime.now()
+    room_info = Rooms.query.filter_by(code=room_code).first()
+
+    if room_info:
+        db_members_list = room_info.members.split(",") if room_info.members else []
+        active_members = []
+
+        for member in db_members_list:
+            last_time = last_heartbeat.get(room_code, {}).get(member)
+            
+            if last_time and (current_time - last_time) <= timedelta(minutes=1):
+                active_members.append(member)
+            else:
+                # This member is considered inactive. Notify other members.
+                content = {
+                    "name": "Room",
+                    "message": f"{member} was removed due to inactivity",
+                    "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "profile_picture": profile_pictures.get("Room", "")
+                }
+                print(f'Removed {member} due to inactivity')
+                send(content, to=room_code)
+                socketio.emit("memberChange", active_members, to=room_code)
+
+        # Update members list in database
+        room_info.members = ",".join(active_members)
+        db.session.commit()
+
+
+# Start the cleanup task
+eventlet.spawn(cleanup_inactive_members)
 
 
 if __name__ == '__main__':

@@ -3,7 +3,7 @@
 <div class="parent-container">
   <div class="room-box">
     <div class="message-box">
-      <h2> Chat Room: {{code}}</h2>
+      <h2 id="room_code">{{code}}</h2>
       <div id="name" hidden>{{session['name']}}</div>
       <div class="messages" id="messages"></div>
       <div class="inputs">
@@ -55,6 +55,7 @@
   const sessions = document.getElementById('sessions');
 
   const curr_name = document.getElementById('name').innerHTML;
+  const room_code = document.getElementById('room_code').innerHTML;
 
   var current_session = 1;  // Initialize to 1 as default session
 
@@ -283,7 +284,9 @@
         });
     });
   };
-
+  setInterval(function() {
+      socketio.emit('heartbeat', { room: room_code });
+  }, 30000);  // 30 seconds
   loadSessions();  // Load the sessions when the page loads
 
 
