@@ -93,7 +93,7 @@ class ChatbotMessages(db.Model):
     date = db.Column(db.DateTime, nullable=False)
 
 # initialisation object for socketio library
-socketio = SocketIO(app , async_mode='eventlet')
+socketio = SocketIO(app , async_mode='eventlet', cors_allowed_origins="*")
 
 # Dictionary to cache profile pictures for each user. Key: Name, Value: Base64-encoded image
 profile_pictures = {}
