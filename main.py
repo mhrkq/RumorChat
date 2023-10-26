@@ -761,7 +761,7 @@ def cleanup_inactive_members():
                             "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                             "profile_picture": profile_pictures.get("Room", "")
                         }
-                        send(content, to=room)
+                        # send(content, to=room)
                         emit("memberChange", members_list, to=room)
                     # Remove the member from our tracking dict
                     del last_heartbeat[room][member]
@@ -792,7 +792,7 @@ def remove_inactive_members_from_db(room_code):
                     "profile_picture": profile_pictures.get("Room", "")
                 }
                 print(f'Removed {member} due to inactivity')
-                send(content, to=room_code)
+                # send(content, to=room_code)
                 socketio.emit("memberChange", active_members, to=room_code)
 
         # Update members list in database
