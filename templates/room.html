@@ -100,6 +100,7 @@
   });
 
   const sendMessage = () => {
+    socketio.emit('heartbeat', { room: room_code, name: curr_name});
     console.log('send message');
     const message = document.getElementById('message');
     if (message.value == "") return;
@@ -140,6 +141,7 @@
 
   // Function to visually update the active session
   function updateActiveSession() {
+    socketio.emit('heartbeat', { room: room_code, name: curr_name});
     // Remove the active class from all session items
     document.querySelectorAll('.session-item').forEach((elem) => {
       elem.classList.remove('active');
@@ -151,6 +153,7 @@
 
   // Function to load available sessions
   function loadSessions() {
+      socketio.emit('heartbeat', { room: room_code, name: curr_name});
       // Implement an AJAX call here to fetch sessions.
       // For example, it might look something like this:
       fetch('/get_sessions', { method: 'POST',
@@ -175,6 +178,7 @@
   }
 
   function createNewSession() {
+    socketio.emit('heartbeat', { room: room_code, name: curr_name});
     // Make an AJAX call to the server to create a new session
     fetch('/create_new_session', {
         method: 'POST',
@@ -196,6 +200,7 @@
 
   // Called multiple times to generate and display the Chatbot messages
   const createChatbotMessage = (name, msg, date, profile_picture) => {
+      socketio.emit('heartbeat', { room: room_code, name: curr_name});
       // Replace all newlines with <br> tags
       msg = msg.replace(/\n/g, "<br>");
       // Create the HTML element here
@@ -215,6 +220,7 @@
   };
 
   const sendMessageToChatbot = () => {
+    socketio.emit('heartbeat', { room: room_code, name: curr_name});
     const message = document.getElementById('message-chatbot');
     if (message.value == "") return;
     // Disable the send button and textbox
@@ -266,6 +272,7 @@
 
   // When the user clicks on the session
   const loadSessionHistory = (session) => {
+    socketio.emit('heartbeat', { room: room_code, name: curr_name});
     // Implement an AJAX call to fetch session history
     // Clear the existing chatbot messages
     messagesChatbot.innerHTML = "";
@@ -285,7 +292,7 @@
     });
   };
   setInterval(function() {
-      socketio.emit('heartbeat', { room: room_code });
+      socketio.emit('heartbeat', { room: room_code, name: curr_name});
   }, 30000);  // 30 seconds
   loadSessions();  // Load the sessions when the page loads
 

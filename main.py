@@ -734,7 +734,7 @@ def chatbot_message(data):
 @socketio.on('heartbeat')
 def heartbeat(data):
     room = data['room']
-    name = session.get('name')
+    name = data['name']
     
     # Update the last heartbeat time
     last_heartbeat[room][name] = datetime.now()
