@@ -31,7 +31,9 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="Run Flask App")
     parser.add_argument("--logging", action="store_true",
                         help="Enable logging print statements")
-    return parser.parse_args()
+    # Parse known arguments and ignore unknown
+    args, _ = parser.parse_known_args()
+    return args
 
 args = parse_arguments()
 LOGGING = args.logging
@@ -744,8 +746,8 @@ def cleanup_inactive_members():
         
         for room, members in last_heartbeat.items():
             for member, last_time in list(members.items()):
-                if (current_time - last_time) > timedelta(minutes=1):
-                    # This member has been inactive for more than a minute
+                if (current_time - last_time) > timedelta(minutes=2):
+                    # This member has been inactive for more than two minutes
                     room_info = Rooms.query.filter_by(code=room).first()
                     if room_info and member in room_info.members.split(","):
                         # Remove member from members list and commit
