@@ -803,7 +803,7 @@ def remove_inactive_members_from_db(room_code):
 
 
 # Start the cleanup task
-eventlet.spawn(cleanup_inactive_members)
+# eventlet.spawn(cleanup_inactive_members)
 
 
 if __name__ == '__main__':
