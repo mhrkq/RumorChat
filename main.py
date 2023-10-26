@@ -2,7 +2,6 @@ import eventlet
 eventlet.monkey_patch()
 
 import logging
-logging.basicConfig(level=logging.DEBUG)
 
 from flask_cors import CORS
 
@@ -38,7 +37,14 @@ def parse_arguments():
 args = parse_arguments()
 LOGGING = args.logging
 
+# Set up the logging
+logging.basicConfig(level=logging.DEBUG)
 
+# Adjust the logging level for Flask-SocketIO
+engineio_logger = logging.getLogger("engineio.server")
+engineio_logger.setLevel(logging.DEBUG)
+socketio_logger = logging.getLogger("socketio.server")
+socketio_logger.setLevel(logging.DEBUG)
 
 
 # Load environment variables from the .env file
