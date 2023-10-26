@@ -46,7 +46,7 @@
 <script type="text/javascript">
   // When socketio initiated, you directly connect to the socketio server associated
   // with the Flask website on localhost. This emits the 'connect' event to the server.
-  var socketio = io();
+  var socketio = io({ transports: ['websocket'] });
 
   const messages = document.getElementById('messages');
   const members = document.getElementById('members');
