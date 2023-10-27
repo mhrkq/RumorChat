@@ -244,7 +244,8 @@
 
   socketio.on("chatbot_ack", (data) => {
     createChatbotMessage(data.name, data.message, data.date, data.profile_picture);
-    messagesChatbot.innerHTML += '<div class="loading">...loading</div>';
+    var reqCount = data.requests_in_progress;
+    messagesChatbot.innerHTML += `<div class="loading">Processing ${reqCount} ${reqCount>1 ? 'requests' : 'request'} in queue. Please wait about ${reqCount} ${reqCount>1 ? 'minutes' : 'minute'}.</div>`;
   });
 
   // Listen for chatbot responses

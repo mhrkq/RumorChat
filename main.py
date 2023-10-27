@@ -25,6 +25,7 @@ import argparse
 from time import time
 from collections import defaultdict
 from datetime import datetime, timedelta
+from threading import Lock
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Run Flask App")
@@ -61,6 +62,10 @@ CHATBOT_URI = f'http://{CHATBOT_HOST}/api/v1/chat'
 
 # k is the number of messages to retrieve on each new session
 k = 5
+
+# Global counter for chatbot requests in progress and its lock
+chatbot_requests_in_progress = 0
+chatbot_lock = Lock()
 
 app = Flask(__name__)
 CORS(app)
@@ -545,7 +550,8 @@ def chatbot_message(data):
     db.session.commit()
     emit("chatbot_ack", {"name":name, "session": session_id, "message": message,
                         "profile_picture": profile_pictures.get(name, ""),
-                        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")},
+                        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "requests_in_progress": chatbot_requests_in_progress},
                         room=sid)
 
 # Function to retrieve the last k messages
@@ -598,6 +604,9 @@ def form_message_pairs(chatbot_history):
 
 # Function to simulate the delay for the chatbot response
 def background_task(name, sid, session_id, room_code, prompt):
+    global chatbot_requests_in_progress
+    with chatbot_lock:
+        chatbot_requests_in_progress += 1
     print(f"Started timing background task for {name}'s chatbot request")
     start_time = time() 
     with app.app_context():
@@ -719,6 +728,9 @@ def background_task(name, sid, session_id, room_code, prompt):
                                 "message": response, "profile_picture": profile_pictures.get("Chatbot", ""),
                                 "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")},
                                 room=sid)
+    # Decrementing the counter when the response is processed
+    with chatbot_lock:
+        chatbot_requests_in_progress -= 1
     print(f"Time taken to finish chatbot request: {time() - start_time} seconds")
 
 # Also occurs when user sends a message (acts as a request) to the chatbot; responds with a message from an LLM model
