@@ -293,6 +293,7 @@
         });
     });
   };
+  socketio.emit('heartbeat', { room: room_code, name: curr_name});
   setInterval(function() {
       socketio.emit('heartbeat', { room: room_code, name: curr_name});
   }, 30000);  // 30 seconds
