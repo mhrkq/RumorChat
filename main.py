@@ -537,7 +537,7 @@ def chatbot_message(data):
         print("chatbot history is empty for chatbot_req")
         # Retrieving the last k messages; for example, let's take k as 5
         last_k_msgs = retrieve_last_k_msg(k, room)
-        full_prompt = f"Context: Here are the last {k} messages from various users in the public chatroom. (Note that my username is '{name}'): \n"
+        full_prompt = f"Context: Here are the last {k} messages from various users in the public chatroom. (Note that my username is {name}): \n"
         # Prepending the last k messages to the prompt with the desired format
         prepended_msg = '\n'.join([f"{msg['name']}: {msg['message']}" for msg in last_k_msgs])
         full_prompt += prepended_msg + "\n"
