@@ -3,12 +3,12 @@
 <div class="parent-container">
   <div class="room-box">
     <div class="message-box">
-      <h2 id="room_code">{{code}}</h2>
-      <div id="name" hidden>{{session['name']}}</div>
+      <h2 id="room-code">{{code}}</h2>
+      <div id="user-name" hidden>{{session['name']}}</div>
       <div class="messages" id="messages"></div>
       <div class="inputs">
-        <input type="text" rows="3" name="message" id="message" placeholder="Message" onkeyup="checkEnter(event)"/>
-        <button type="button" name="send" id="send-btn" onclick="sendMessage()">
+        <input type="text" id="message-input" name="message" placeholder="Message" onkeyup="checkEnter(event)" />
+        <button type="button" id="send-btn" onclick="sendMessage()">
           Send
         </button>
       </div>
@@ -34,13 +34,12 @@
       <h2> Chatbot </h2>
       <div class="messages-chatbot" id="messages-chatbot"></div>
       <div class="inputs">
-        <input type="text" rows="3" name="message-chatbot" id="message-chatbot" placeholder="Message for chatbot" onkeyup="checkEnterChatbot(event)"/>
-        <button type="button" name="send-chatbot" id="send-btn-chatbot" onclick="sendMessageToChatbot()">
+        <input type="text" id="chatbot-message-input" name="message-chatbot" placeholder="Message for chatbot" onkeyup="checkEnterChatbot(event)" />
+        <button type="button" id="send-btn-chatbot" onclick="sendMessageToChatbot()">
           Send
         </button>
       </div>
     </div>
-    
   </div>
 </div>
 <script type="text/javascript">
