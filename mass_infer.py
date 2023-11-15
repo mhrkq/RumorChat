@@ -195,8 +195,8 @@ def main():
         # Convert the list of dicts to a DataFrame
         responses_df = pd.DataFrame(responses)
 
-        # Combine the input df with responses_df to keep the same column format
-        final_df = pd.concat([df.iloc[:, :-1], responses_df["chatbot_reply"]], axis=1)
+        # Combine the input df with responses_df to include both user_input and chatbot_reply
+        final_df = pd.concat([df.iloc[:, :-1], responses_df], axis=1)
 
         # Save the final DataFrame to a new CSV file
         final_df.to_csv(output_path, index=False)
