@@ -135,7 +135,7 @@
   const createComment = (commentData) => {
     var upvoteClass = commentData.userVote === 1 ? "voted" : "";
     var downvoteClass = commentData.userVote === -1 ? "voted" : "";
-    console.log("Creating comment: " + commentData.id + " with votes: " + commentData.votes);
+    
 
     var commentHtml = `
     <div id='comment_${commentData.id}' class='comment'>
@@ -150,9 +150,24 @@
         <button onclick='toggleComments(${commentData.id})'>Reply</button>
         <div id='replies_${commentData.id}' class='replies' style='display: none;'></div>
     </div>`;
-
     var commentsDiv = document.getElementById("comments");
     commentsDiv.innerHTML += commentHtml;
+
+     // Ensuring that the "voted" class is applied correctly
+    const commentElement = document.getElementById(`comment_${commentData.id}`);
+    const upvoteButton = commentElement.querySelector(".fa-thumbs-up");
+    const downvoteButton = commentElement.querySelector(".fa-thumbs-down");
+    if (commentData.userVote === 1) {
+        upvoteButton.classList.add("voted");
+        downvoteButton.classList.remove("voted");
+    } else if (commentData.userVote === -1) {
+        downvoteButton.classList.add("voted");
+        upvoteButton.classList.remove("voted");
+    } else {
+        upvoteButton.classList.remove("voted");
+        downvoteButton.classList.remove("voted");
+    }
+    console.log("Creating comment: " + commentData.id + " with votes: " + commentData.votes);
     scrollToBottomComment();
   }
 
@@ -180,20 +195,21 @@
   };
 
   socketio.on("update_vote", (data) => {
-    console.log("Received vote update for comment: " + data.comment_id);
+    // console.log("Received vote update for comment: " + data.comment_id);
     const voteElement = document.getElementById(`votes_${data.comment_id}`);
     const commentElement = document.getElementById(`comment_${data.comment_id}`);
     
     if (voteElement) {
         voteElement.innerText = data.votes;
-        console.log("Updated vote count for comment: " + data.comment_id);
+        // console.log("Updated vote count for comment: " + data.comment_id);
     }
 
     if (commentElement) {
-        const upvoteButton = commentElement.querySelector(".upvote-button");
-        const downvoteButton = commentElement.querySelector(".downvote-button");
+        const upvoteButton = commentElement.querySelector(".fa-thumbs-up");
+        const downvoteButton = commentElement.querySelector(".fa-thumbs-down");
         console.log("Found vote buttons for comment: " + data.comment_id);
         if (upvoteButton && downvoteButton) {
+          console.log("Updating vote buttons for comment: " + data.comment_id)
             if (data.userVote === 1) {
                 upvoteButton.classList.add("voted");
                 downvoteButton.classList.remove("voted");

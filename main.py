@@ -359,19 +359,23 @@ def room():
     
     # Query for comments in the current room
     comments = Comments.query.filter_by(room_code=room).order_by(Comments.timestamp).all()
-    comments_list = [
-        {
+    comments_data = []
+    for comment in comments:
+        user_vote_obj = CommentVotes.query.filter_by(comment_id=comment.id, username=name).first()
+        user_vote = 0  # Default to no vote
+        if user_vote_obj:
+            user_vote = user_vote_obj.vote
+        comments_data.append({
             "id": comment.id,
-            "username": comment.username,
             "text": comment.text,
+            "username": comment.username,
             "timestamp": comment.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
             "votes": comment.votes,
-            "parent_id": comment.parent_id,
+            "userVote": user_vote,
             "profile_picture": profile_pictures.get(comment.username, "")
-        }
-        for comment in comments
-    ]
-    # print(f"comments_list: {comments_list}")
+        })
+        
+    print(f"comments_data: {comments_data}")
 
     # Query for chatbot messages in default session (session 1)
     chatbot_messages = ChatbotMessages.query.filter_by(owner=name, session=1).all()
@@ -405,7 +409,7 @@ def room():
         code=room,
         messages=messages_list,
         chatbot_messages=chatbot_messages_list,
-        comments=comments_list, 
+        comments=comments_data, 
         profile_pictures=profile_pictures,
         name=name,
         max_session=max_session,
@@ -478,6 +482,9 @@ def handle_comment(data):
     comment = Comments(room_code=room, username=username, text=text, parent_id=parent_id)
     db.session.add(comment)
     db.session.commit()
+    
+    # Query the vote count for the newly added comment
+    vote_count = CommentVotes.query.with_entities(db.func.sum(CommentVotes.vote)).filter_by(comment_id=comment.id).scalar() or 0
 
     if LOGGING:
         print(f"Time taken to add and commit new comment: {time() - start_time} seconds")
@@ -489,7 +496,7 @@ def handle_comment(data):
         "text": text,
         "username": username,
         "timestamp": comment.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-        "votes": 0,  # Initial votes count is 0
+        "votes": vote_count,  # Actual votes count
         "profile_picture": profile_pictures.get(username, "")
     }, room=room)
 
@@ -508,6 +515,7 @@ def handle_vote(data):
         if existing_vote.vote == vote:
             # User clicked the same vote again, rescind the vote
             db.session.delete(existing_vote)
+            vote = 0  # No vote from this user
         else:
             # Change the vote direction
             existing_vote.vote = vote
@@ -516,12 +524,17 @@ def handle_vote(data):
         new_vote = CommentVotes(comment_id=comment_id, username=username, vote=vote)
         db.session.add(new_vote)
 
-    db.session.commit()
-
+    # Calculate the updated vote count
     updated_votes = CommentVotes.query.with_entities(db.func.sum(CommentVotes.vote)).filter_by(comment_id=comment_id).scalar() or 0
 
+    # Update the vote count in Comments table
+    comment = Comments.query.get(comment_id)
+    if comment:
+        comment.votes = updated_votes
+        db.session.commit()
+
     # Determine the user's current vote status
-    user_vote = 1 if existing_vote and existing_vote.vote == 1 else -1 if existing_vote and existing_vote.vote == -1 else 0
+    user_vote = 1 if vote == 1 else -1 if vote == -1 else 0
 
     emit("update_vote", {"comment_id": comment_id, "votes": updated_votes, "userVote": user_vote}, room=session.get("room"))
 ##################################################
