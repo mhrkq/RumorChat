@@ -112,6 +112,26 @@ class ChatbotMessages(db.Model):
     message = db.Column(db.String, nullable=False)
     date = db.Column(db.DateTime, nullable=False)
 
+class Comments(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    room_code = db.Column(db.String, db.ForeignKey("rooms.code"), nullable=False)
+    parent_id = db.Column(db.Integer, db.ForeignKey('comments.id'), nullable=True)  # For hierarchical structure
+    username = db.Column(db.String, nullable=False)
+    text = db.Column(db.String, nullable=False)
+    timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    votes = db.Column(db.Integer, default=0)
+    # Hierarchical relationship to enable tree-like structure of comments
+    replies = db.relationship('Comments', backref=db.backref('parent', remote_side=[id]), lazy='dynamic')
+    
+class CommentVotes(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    comment_id = db.Column(db.Integer, db.ForeignKey('comments.id'), nullable=False)
+    username = db.Column(db.String, nullable=False)
+    vote = db.Column(db.Integer, nullable=False)  # 1 for upvote, -1 for downvote
+
+    def __repr__(self):
+        return f'<CommentVotes {self.username} {self.vote}>'
+
 
 # initialisation object for socketio library
 socketio = SocketIO(app, async_mode="eventlet", cors_allowed_origins="*")
@@ -336,6 +356,22 @@ def room():
             f"Time taken to generate_identicon in room(): {time() - start_time} seconds"
         )
         start_time = time()
+    
+    # Query for comments in the current room
+    comments = Comments.query.filter_by(room_code=room).order_by(Comments.timestamp).all()
+    comments_list = [
+        {
+            "id": comment.id,
+            "username": comment.username,
+            "text": comment.text,
+            "timestamp": comment.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+            "votes": comment.votes,
+            "parent_id": comment.parent_id,
+            "profile_picture": profile_pictures.get(comment.username, "")
+        }
+        for comment in comments
+    ]
+    # print(f"comments_list: {comments_list}")
 
     # Query for chatbot messages in default session (session 1)
     chatbot_messages = ChatbotMessages.query.filter_by(owner=name, session=1).all()
@@ -369,6 +405,7 @@ def room():
         code=room,
         messages=messages_list,
         chatbot_messages=chatbot_messages_list,
+        comments=comments_list, 
         profile_pictures=profile_pictures,
         name=name,
         max_session=max_session,
@@ -421,6 +458,73 @@ def message(data):
         )
         start_time = time()
     print(f"{session.get('name')} said: {data['data']} in room {room}")
+    
+################# ADDING COMMENTS #################
+@socketio.on("submit_comment")
+def handle_comment(data):
+    if LOGGING:
+        start_time = time()
+        print(f"Time started for handle_comment()")
+
+    room = session.get("room")
+    username = session.get("name")
+    text = data["text"]
+    parent_id = data.get("parent_id")  # None for root comments
+
+    if not room or not username:
+        print("Room or username not found in session")
+        return
+
+    comment = Comments(room_code=room, username=username, text=text, parent_id=parent_id)
+    db.session.add(comment)
+    db.session.commit()
+
+    if LOGGING:
+        print(f"Time taken to add and commit new comment: {time() - start_time} seconds")
+        start_time = time()
+
+    # After committing the new comment to the database
+    emit("new_comment", {
+        "id": comment.id,
+        "text": text,
+        "username": username,
+        "timestamp": comment.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+        "votes": 0,  # Initial votes count is 0
+        "profile_picture": profile_pictures.get(username, "")
+    }, room=room)
+
+    if LOGGING:
+        print(f"Time taken to emit new_comment event: {time() - start_time} seconds")
+        
+@socketio.on("vote_comment")
+def handle_vote(data):
+    comment_id = data["comment_id"]
+    vote = data["vote"]  # Assume 1 for upvote, -1 for downvote
+    username = session.get("name")
+
+    existing_vote = CommentVotes.query.filter_by(comment_id=comment_id, username=username).first()
+
+    if existing_vote:
+        if existing_vote.vote == vote:
+            # User clicked the same vote again, rescind the vote
+            db.session.delete(existing_vote)
+        else:
+            # Change the vote direction
+            existing_vote.vote = vote
+    else:
+        # New vote
+        new_vote = CommentVotes(comment_id=comment_id, username=username, vote=vote)
+        db.session.add(new_vote)
+
+    db.session.commit()
+
+    updated_votes = CommentVotes.query.with_entities(db.func.sum(CommentVotes.vote)).filter_by(comment_id=comment_id).scalar() or 0
+
+    # Determine the user's current vote status
+    user_vote = 1 if existing_vote and existing_vote.vote == 1 else -1 if existing_vote and existing_vote.vote == -1 else 0
+
+    emit("update_vote", {"comment_id": comment_id, "votes": updated_votes, "userVote": user_vote}, room=session.get("room"))
+##################################################
 
 
 # Connect occurs when user enters the room; no authentication required

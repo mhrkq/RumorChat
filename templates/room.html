@@ -1,6 +1,20 @@
 {% extends 'base.html' %}
 {% block content %}
 <div class="parent-container">
+  <div class="room-box-comments">
+    <div class="comment-box">
+        <h2>Comments</h2>
+        <div class="comments" id="comments"></div>
+        <div class="inputs">
+            <input type="text" rows="3" name="new-comment-text" id="new-comment-text" placeholder="Post your comments" onkeyup="checkEnterComment(event)"/>
+            <button type="button" name="send-comment" id="send-btn-comment" onclick="submitComment()">Submit Comment</button>
+        </div>
+    </div>
+    <div class="members-box">
+      <h2>Members</h2>
+      <div class="members" id="members"></div>
+    </div>
+  </div>
   <div class="room-box">
     <div class="message-box">
       <h2 id="room_code">{{code}}</h2>
@@ -13,11 +27,12 @@
         </button>
       </div>
     </div>
-    <div class="members-box">
+    <div class="hidden-box">
       <h2>Members</h2>
       <div class="members" id="members"></div>
     </div>
   </div>
+  
   <div class="room-box-chatbot">
     <div class="sessions-box">
       <h2>Sessions</h2>
@@ -40,7 +55,6 @@
         </button>
       </div>
     </div>
-    
   </div>
 </div>
 <script type="text/javascript">
@@ -53,6 +67,8 @@
 
   const messagesChatbot = document.getElementById('messages-chatbot');
   const sessions = document.getElementById('sessions');
+
+  const comments = document.getElementById('comments');
 
   const curr_name = document.getElementById('name').innerHTML;
   const room_code = document.getElementById('room_code').innerHTML;
@@ -68,6 +84,11 @@
   const scrollToBottomChatbot = () => {
     messagesChatbot.offsetHeight;
     messagesChatbot.scrollTop = messagesChatbot.scrollHeight;
+  };
+
+  const scrollToBottomComment = () => {
+    comments.offsetHeight;
+    comments.scrollTop = comments.scrollHeight;
   };
 
   const checkEnter = (event) => {
@@ -109,6 +130,87 @@
     message.value = ""; // clear the message box
     // scrollToBottom();  // Scroll to the bottom after sending a message
   };
+
+  // Called multiple times to generate and display the comments
+  const createComment = (commentData) => {
+    var upvoteClass = commentData.userVote === 1 ? "voted" : "";
+    var downvoteClass = commentData.userVote === -1 ? "voted" : "";
+    console.log("Creating comment: " + commentData.id + " with votes: " + commentData.votes);
+
+    var commentHtml = `
+    <div id='comment_${commentData.id}' class='comment'>
+        <div><img src='data:image/png;base64,${commentData.profile_picture}' alt='Profile Picture'></div>
+        <div><strong>${commentData.username}</strong>: ${commentData.text}</div>
+        <div class='timestamp'>${commentData.timestamp}</div>
+        <div class='votes'>
+            <i class='fa fa-thumbs-up ${upvoteClass}' onclick='voteComment(${commentData.id}, 1)'></i>
+            <span id='votes_${commentData.id}'>${commentData.votes}</span>
+            <i class='fa fa-thumbs-down ${downvoteClass}' onclick='voteComment(${commentData.id}, -1)'></i>
+        </div>
+        <button onclick='toggleComments(${commentData.id})'>Reply</button>
+        <div id='replies_${commentData.id}' class='replies' style='display: none;'></div>
+    </div>`;
+
+    var commentsDiv = document.getElementById("comments");
+    commentsDiv.innerHTML += commentHtml;
+    scrollToBottomComment();
+  }
+
+
+  const toggleComments = (commentId) => {
+    var repliesDiv = document.getElementById("replies_" + commentId);
+    repliesDiv.style.display = (repliesDiv.style.display === "none" ? "block" : "none");
+  }
+
+  const submitComment = () => {
+    var text = document.getElementById('new-comment-text').value;
+    socketio.emit('submit_comment', {text: text});
+    document.getElementById('new-comment-text').value = '';
+  }
+
+  const checkEnterComment = (event) => {
+    if (event.key === 'Enter') {
+    submitComment();
+    }
+  };
+
+  const voteComment = (commentId, voteValue) => {
+    // Emit the vote to the server
+    socketio.emit('vote_comment', { comment_id: commentId, vote: voteValue });
+  };
+
+  socketio.on("update_vote", (data) => {
+    console.log("Received vote update for comment: " + data.comment_id);
+    const voteElement = document.getElementById(`votes_${data.comment_id}`);
+    const commentElement = document.getElementById(`comment_${data.comment_id}`);
+    
+    if (voteElement) {
+        voteElement.innerText = data.votes;
+        console.log("Updated vote count for comment: " + data.comment_id);
+    }
+
+    if (commentElement) {
+        const upvoteButton = commentElement.querySelector(".upvote-button");
+        const downvoteButton = commentElement.querySelector(".downvote-button");
+        console.log("Found vote buttons for comment: " + data.comment_id);
+        if (upvoteButton && downvoteButton) {
+            if (data.userVote === 1) {
+                upvoteButton.classList.add("voted");
+                downvoteButton.classList.remove("voted");
+            } else if (data.userVote === -1) {
+                downvoteButton.classList.add("voted");
+                upvoteButton.classList.remove("voted");
+            } else {
+                upvoteButton.classList.remove("voted");
+                downvoteButton.classList.remove("voted");
+            }
+        }
+    }
+  });
+
+  socketio.on("new_comment", (data) => {
+    createComment(data);
+  });
 
   socketio.on("memberChange", (membersArr) => {
     // display the members, updating the members div with the member names
@@ -311,6 +413,19 @@
 <script type="text/javascript">
   var profile_picture = "{{ profile_pictures[chatbotMsg.name] if chatbotMsg.name in profile_pictures else '' }}";
   createChatbotMessage('{{chatbotMsg.name}}', '{{chatbotMsg.message}}', '{{chatbotMsg.date}}', profile_picture);
+</script>
+<script type="text/javascript">
+{% for comment in comments %}
+    var commentData = {
+        id: '{{ comment.id }}',
+        username: '{{ comment.username }}',
+        text: '{{ comment.text }}',
+        timestamp: '{{ comment.timestamp }}',
+        votes: '{{ comment.votes }}',
+        profile_picture: '{{ profile_pictures[comment.username] if comment.username in profile_pictures else '' }}'
+    };
+    createComment(commentData);
+{% endfor %}
 </script>
 {% endfor %}
 {% endblock %}
