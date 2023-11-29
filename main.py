@@ -375,7 +375,7 @@ def room():
             "profile_picture": profile_pictures.get(comment.username, "")
         })
         
-    print(f"comments_data: {comments_data}")
+    
 
     # Query for chatbot messages in default session (session 1)
     chatbot_messages = ChatbotMessages.query.filter_by(owner=name, session=1).all()
@@ -404,6 +404,7 @@ def room():
     # remove_inactive_members_from_db(room)
     if LOGGING:
         print(f"Time taken to finish room(): {time() - start_time} seconds")
+    print(f"comments_data sent to client: {comments_data}")
     return render_template(
         "room.html",
         code=room,
