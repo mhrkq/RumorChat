@@ -28,7 +28,7 @@
   border-style: solid;
   border-radius: 10px;
   background-color: whitesmoke;
-  height: 45vh;
+  height: 400px;
   display: flex;
   flex-direction: column;
   width: 80vw;
@@ -41,7 +41,7 @@
   border-style: solid;
   border-radius: 10px;
   background-color: whitesmoke;
-  height: 30vh;
+  height: 400px;
   display: flex;
   flex-direction: column;
   width: 80vw;

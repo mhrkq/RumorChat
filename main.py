@@ -6,7 +6,6 @@ import logging
 
 from flask_cors import CORS
 
-
 from flask import Flask, render_template, request, session, redirect, url_for, jsonify
 from flask_socketio import SocketIO, emit, join_room, leave_room, send
 import random
@@ -358,22 +357,25 @@ def room():
         start_time = time()
     
     # Query for comments in the current room
-    comments = Comments.query.filter_by(room_code=room).order_by(Comments.timestamp).all()
-    comments_data = []
-    for comment in comments:
-        user_vote_obj = CommentVotes.query.filter_by(comment_id=comment.id, username=name).first()
-        user_vote = 0  # Default to no vote
-        if user_vote_obj:
-            user_vote = user_vote_obj.vote
-        comments_data.append({
-            "id": comment.id,
-            "text": comment.text,
-            "username": comment.username,
-            "timestamp": comment.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-            "votes": comment.votes,
-            "userVote": user_vote,
-            "profile_picture": profile_pictures.get(comment.username, "")
-        })
+    # comments = Comments.query.filter_by(room_code=room).order_by(Comments.timestamp).all()
+    # comments_data = []
+    # for comment in comments:
+    #     user_vote_obj = CommentVotes.query.filter_by(comment_id=comment.id, username=name).first()
+    #     user_vote = 0  # Default to no vote
+    #     if user_vote_obj:
+    #         user_vote = user_vote_obj.vote
+    #     comments_data.append({
+    #         "id": comment.id,
+    #         "text": comment.text,
+    #         "username": comment.username,
+    #         "timestamp": comment.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+    #         "votes": comment.votes,
+    #         "userVote": user_vote,
+    #         "profile_picture": profile_pictures.get(comment.username, "")
+    #     })
+    
+    # Recursive Query for comments in the current room
+    comments_data = fetch_comments_with_replies(session.get("room"), comment_id=None)
         
     
 
@@ -477,8 +479,14 @@ def handle_comment(data):
     parent_id = data.get("parent_id")  # None for root comments
 
     if not room or not username:
-        print("Room or username not found in session")
+        print(f"Room or username not found in session. Room: {room}, Username: {username}")
         return
+    
+    if parent_id:
+        parent_comment = Comments.query.get(parent_id)
+        if not parent_comment:
+            print(f"Parent comment does not exist. Parent ID: {parent_id}")
+            return  # Parent comment does not exist
 
     comment = Comments(room_code=room, username=username, text=text, parent_id=parent_id)
     db.session.add(comment)
@@ -498,7 +506,8 @@ def handle_comment(data):
         "username": username,
         "timestamp": comment.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
         "votes": vote_count,  # Actual votes count
-        "profile_picture": profile_pictures.get(username, "")
+        "profile_picture": profile_pictures.get(username, ""),
+        "parent_id": parent_id
     }, room=room)
 
     if LOGGING:
@@ -538,6 +547,28 @@ def handle_vote(data):
     user_vote = 1 if vote == 1 else -1 if vote == -1 else 0
 
     emit("update_vote", {"comment_id": comment_id, "votes": updated_votes, "userVote": user_vote}, room=session.get("room"))
+
+# HANDLING REPLIES
+def fetch_comments_with_replies(room_code, comment_id=None):
+    comments = Comments.query.filter_by(parent_id=comment_id, room_code=room_code).order_by(Comments.timestamp).all()
+    comments_data = []
+    for comment in comments:
+        replies = fetch_comments_with_replies(room_code, comment_id=comment.id)
+        user_vote_obj = CommentVotes.query.filter_by(comment_id=comment.id, username=session.get("name")).first()
+        user_vote = user_vote_obj.vote if user_vote_obj else 0
+        comments_data.append({
+            "id": comment.id,
+            "text": comment.text,
+            "username": comment.username,
+            "timestamp": comment.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+            "votes": comment.votes,
+            "userVote": user_vote,
+            "profile_picture": profile_pictures.get(comment.username, ""),
+            "replies": replies
+        })
+    return comments_data
+
+
 ##################################################
 
 

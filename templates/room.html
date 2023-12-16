@@ -131,66 +131,109 @@
     // scrollToBottom();  // Scroll to the bottom after sending a message
   };
 
+
+
   // Called multiple times to generate and display the comments
-  const createComment = (commentData) => {
-    var upvoteClass = commentData.userVote === 1 ? "voted" : "";
-    var downvoteClass = commentData.userVote === -1 ? "voted" : "";
-    
+  const createComment = (commentData, parentElement, depth = 0) => {
+      var upvoteClass = commentData.userVote == 1 ? "voted" : "";
+      var downvoteClass = commentData.userVote == -1 ? "voted" : "";
+      var commentElement = document.createElement('div');
+      commentElement.id = `comment_${commentData.id}`;
+      commentElement.className = 'comment';
+      commentElement.setAttribute('data-user-vote', commentData.userVote);
+      commentElement.setAttribute('data-depth', depth);
+      commentElement.style.marginLeft = `${depth * 20}px`;
+      commentElement.innerHTML = `
+          <div><img src='data:image/png;base64,${commentData.profile_picture}' alt='Profile Picture'></div>
+          <div><strong>${commentData.username}</strong>: ${commentData.text}</div>
+          <div class='timestamp'>${commentData.timestamp}</div>
+          <div class='votes'>
+              <i class='fa fa-thumbs-up ${upvoteClass}' onclick='voteComment(${commentData.id}, 1)'></i>
+              <span id='votes_${commentData.id}'>${commentData.votes}</span>
+              <i class='fa fa-thumbs-down ${downvoteClass}' onclick='voteComment(${commentData.id}, -1)'></i>
+          </div>
+          <button id='reply_${commentData.id}' class='reply-btn' onclick='handleReply(${commentData.id}, "${commentData.username}", "${commentData.text.replace(/"/g, '\\"')}", "${commentData.timestamp}")'>Reply</button>
+          <div id='replies_${commentData.id}' class='replies'></div>
+      `;
 
-    var commentHtml = `
-    <div id='comment_${commentData.id}' class='comment'>
-        <div><img src='data:image/png;base64,${commentData.profile_picture}' alt='Profile Picture'></div>
-        <div><strong>${commentData.username}</strong>: ${commentData.text}</div>
-        <div class='timestamp'>${commentData.timestamp}</div>
-        <div class='votes'>
-            <i class='fa fa-thumbs-up ${upvoteClass}' onclick='voteComment(${commentData.id}, 1)'></i>
-            <span id='votes_${commentData.id}'>${commentData.votes}</span>
-            <i class='fa fa-thumbs-down ${downvoteClass}' onclick='voteComment(${commentData.id}, -1)'></i>
-        </div>
-        <button onclick='toggleComments(${commentData.id})'>Reply</button>
-        <div id='replies_${commentData.id}' class='replies' style='display: none;'></div>
-    </div>`;
-    var commentsDiv = document.getElementById("comments");
-    commentsDiv.innerHTML += commentHtml;
+      // Append replies if they exist
+      if (commentData.replies) {
+          commentData.replies.forEach(reply => {
+              createComment(reply, commentElement.querySelector(`#replies_${commentData.id}`), depth + 1);
+          });
+      }
 
-     // Ensuring that the "voted" class is applied correctly
-    const commentElement = document.getElementById(`comment_${commentData.id}`);
-    const upvoteButton = commentElement.querySelector(".fa-thumbs-up");
-    const downvoteButton = commentElement.querySelector(".fa-thumbs-down");
-    if (commentData.userVote == 1) {
-        console.log("here")
-        upvoteButton.classList.add("voted");
-        downvoteButton.classList.remove("voted");
-    } else if (commentData.userVote == -1) {
-        downvoteButton.classList.add("voted");
-        upvoteButton.classList.remove("voted");
-    } else {
-        upvoteButton.classList.remove("voted");
-        downvoteButton.classList.remove("voted");
-    }
-    console.log("Creating comment: " + commentData.id + " with votes: " + commentData.votes + " and userVote: " + commentData.userVote);
-    scrollToBottomComment();
-  }
+      // Append the comment element to the parent
+      parentElement.appendChild(commentElement);
 
-  const updateVoteButtonStyles = (commentId, userVote) => {
-    const commentElement = document.getElementById(`comment_${commentId}`);
-    if (commentElement) {
-        const upvoteButton = commentElement.querySelector(".fa-thumbs-up");
-        const downvoteButton = commentElement.querySelector(".fa-thumbs-down");
-        //console.log("User vote for comment: " + commentId + " is: " + userVote);
-        if (upvoteButton && downvoteButton) {
-            if (userVote == 1) {
-                upvoteButton.classList.add("voted");
-                downvoteButton.classList.remove("voted");
-            } else if (userVote == -1) {
-                downvoteButton.classList.add("voted");
-                upvoteButton.classList.remove("voted");
-            } else {
-                upvoteButton.classList.remove("voted");
-                downvoteButton.classList.remove("voted");
-            }
-        }
-    }
+      // Apply "voted" class if needed
+      applyVoteStyles(commentData.id, commentData.userVote);
+    };
+
+  const applyVoteStyles = (commentId, userVote) => {
+      console.log(`Applying vote styles for comment ${commentId}, userVote: ${userVote}`);
+      const commentElement = document.getElementById(`comment_${commentId}`);
+      if (commentElement) {
+          const upvoteButton = commentElement.querySelector(".fa-thumbs-up");
+          const downvoteButton = commentElement.querySelector(".fa-thumbs-down");
+          if (userVote == 1) {
+              console.log(`Adding 'voted' class to upvote button for comment ${commentId}`);
+              upvoteButton.classList.add("voted");
+              downvoteButton.classList.remove("voted");
+          } else if (userVote == -1) {
+              console.log(`Adding 'voted' class to downvote button for comment ${commentId}`);
+              downvoteButton.classList.add("voted");
+              upvoteButton.classList.remove("voted");
+          } else {
+              console.log(`Removing 'voted' class from both buttons for comment ${commentId}`);
+              upvoteButton.classList.remove("voted");
+              downvoteButton.classList.remove("voted");
+          }
+      }
+  };
+
+  // Use this function to create top-level comments
+  const createTopLevelComment = (commentData) => {
+      createComment(commentData, document.getElementById("comments"), 0);
+  };
+
+  // Function for replying to comments
+  var currentlyReplyingTo = null;
+
+  const replyComment = (commentId, username, text, timestamp) => {
+      const replyInfoDiv = document.getElementById("reply-info");
+      if (currentlyReplyingTo !== commentId) {
+          currentlyReplyingTo = commentId;
+          replyInfoDiv.innerHTML = `Replying to ${username}: "${text}" at ${timestamp}`;
+      } else {
+          currentlyReplyingTo = null;
+          replyInfoDiv.innerHTML = '';
+      }
+  };
+
+  // Function to update the reply button styles
+  const updateReplyButtonStyles = () => {
+      document.querySelectorAll(".comment button.reply-btn").forEach(button => {
+          button.classList.remove("highlighted");
+      });
+      if (currentlyReplyingTo) {
+          const replyButton = document.getElementById(`reply_${currentlyReplyingTo}`);
+          if (replyButton) {
+              replyButton.classList.add("highlighted");
+          }
+      }
+  };
+
+  // Function to handle a reply to a comment
+  const handleReply = (commentId, username, text, timestamp) => {
+      if (currentlyReplyingTo !== commentId) {
+          currentlyReplyingTo = commentId;
+          document.getElementById("new-comment-text").placeholder = `Replying to ${username}: "${text}" at ${timestamp}`;
+      } else {
+          currentlyReplyingTo = null;
+          document.getElementById("new-comment-text").placeholder = "Post your comments";
+      }
+      updateReplyButtonStyles();
   };
 
 
@@ -199,11 +242,16 @@
     repliesDiv.style.display = (repliesDiv.style.display === "none" ? "block" : "none");
   }
 
+  // Function to submit a new comment
   const submitComment = () => {
     var text = document.getElementById('new-comment-text').value;
-    socketio.emit('submit_comment', {text: text});
+    socketio.emit('submit_comment', { text: text, parent_id: currentlyReplyingTo });
     document.getElementById('new-comment-text').value = '';
-  }
+    currentlyReplyingTo = null;
+    updateReplyButtonStyles();
+    scrollToBottomChatbot();
+  };
+
 
   const checkEnterComment = (event) => {
     if (event.key === 'Enter') {
@@ -242,12 +290,34 @@
                 upvoteButton.classList.remove("voted");
                 downvoteButton.classList.remove("voted");
             }
+            
         }
+        // Force a DOM update
+        setTimeout(() => {
+          commentElement.style.display = 'none';
+          commentElement.offsetHeight; // Trigger a reflow
+          commentElement.style.display = '';
+        }, 0);
     }
   });
 
   socketio.on("new_comment", (data) => {
-    createComment(data);
+    // Check if the new comment is a reply (has a parent_id)
+    if (data.parent_id) {
+        // Find the parent comment's replies container
+        const parentRepliesContainer = document.getElementById(`replies_${data.parent_id}`);
+        if (parentRepliesContainer) {
+            // Calculate the depth of the new comment based on the parent comment's depth
+            const parentCommentElement = document.getElementById(`comment_${data.parent_id}`);
+            const depth = parseInt(parentCommentElement.getAttribute('data-depth')) + 1;
+
+            // Create and append the new reply comment
+            createComment(data, parentRepliesContainer, depth);
+        }
+    } else {
+        // If it's a top-level comment, append it to the main comments container
+        createComment(data, document.getElementById("comments"), 0);
+    }
   });
 
   socketio.on("memberChange", (membersArr) => {
@@ -317,6 +387,31 @@
           });
       
   }
+  // Function to apply vote styles to all comments
+  const applyVoteStylesToAllComments = () => {
+      document.querySelectorAll('.comment').forEach(commentElement => {
+          const commentId = commentElement.id.split('_')[1];
+          const upvoteButton = commentElement.querySelector(".fa-thumbs-up");
+          const downvoteButton = commentElement.querySelector(".fa-thumbs-down");
+
+          // Retrieve the userVote attribute stored in the comment element
+          const userVote = parseInt(commentElement.getAttribute('data-user-vote'));
+
+          if (userVote === 1) {
+              upvoteButton.classList.add("voted");
+              downvoteButton.classList.remove("voted");
+          } else if (userVote === -1) {
+              downvoteButton.classList.add("voted");
+              upvoteButton.classList.remove("voted");
+          } else {
+              upvoteButton.classList.remove("voted");
+              downvoteButton.classList.remove("voted");
+          }
+      });
+  };
+
+// Called after all comments are loaded
+setTimeout(applyVoteStylesToAllComments, 0);
 
   function createNewSession() {
     // socketio.emit('heartbeat', { room: room_code, name: curr_name});
@@ -461,10 +556,12 @@
         timestamp: '{{ comment.timestamp }}',
         votes: '{{ comment.votes }}',
         userVote: '{{ comment.userVote }}',
-        profile_picture: '{{ profile_pictures[comment.username] if comment.username in profile_pictures else '' }}'
+        profile_picture: '{{ profile_pictures[comment.username] if comment.username in profile_pictures else '' }}',
+        replies: {{ comment.replies | tojson | safe }}
     };
-    createComment(commentData);
+    createTopLevelComment(commentData);
 {% endfor %}
+
 </script>
 {% endfor %}
 {% endblock %}
