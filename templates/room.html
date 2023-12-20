@@ -178,12 +178,11 @@
             <i class='fa fa-thumbs-up ${upvoteClass}' onclick='voteComment(${commentData.id}, 1)'></i>
             <span id='votes_${commentData.id}'>${commentData.votes}</span>
             <i class='fa fa-thumbs-down ${downvoteClass}' onclick='voteComment(${commentData.id}, -1)'></i>
-          </div>
-          <div>
             <button id='reply_${commentData.id}' class='reply-btn' onclick='handleReply(${commentData.id}, "${commentData.username}", "${commentData.text.replace(/"/g, '\\"')}", "${commentData.timestamp}")'>Reply</button>
             ${reportButtonHtml}
             ${toggleRepliesButtonHtml}
           </div>
+
           <div id='replies_${commentData.id}' class='replies' style='display: ${repliesDisplayStyle};'></div>
           
       `;
