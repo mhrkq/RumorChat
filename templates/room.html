@@ -168,6 +168,9 @@
       commentElement.setAttribute('data-user-vote', commentData.userVote);
       commentElement.setAttribute('data-depth', depth);
       commentElement.style.marginLeft = `${depth * 5}px`;
+      // Determine background color based on depth
+      const backgroundColor = `rgba(175, 175, 175, ${0.03 + depth * 0.03})`; // Adjust the rgba values as needed
+      commentElement.style.backgroundColor = backgroundColor;
       commentElement.innerHTML = `
           <div>
             <img src='data:image/png;base64,${commentData.profile_picture}' alt='Profile Picture'>
@@ -214,7 +217,7 @@
         // If the button doesn't exist, create it and append it in the right place
         const newToggleButton = document.createElement('button');
         newToggleButton.id = `toggle_${commentId}`;
-        newToggleButton.innerText = `Show Replies (${numberOfReplies})`;
+        newToggleButton.innerText = `Show NEW Replies (${numberOfReplies})`;
         newToggleButton.onclick = () => toggleReplies(commentId);
 
         // Append the new button after the reply and report buttons
@@ -229,7 +232,13 @@
         }
       } else if (toggleButton) {
         // Update the existing button text
-        toggleButton.innerText = `Show Replies (${numberOfReplies})`;
+        // Check if the existing button is collapsed or expanded
+        if (repliesDiv.style.display === 'none' || repliesDiv.style.display === '') {
+          toggleButton.innerText = `Show NEW Replies (${numberOfReplies})`;
+        } else {
+          toggleButton.innerText = `Collapse Replies (${numberOfReplies})`;
+        }
+        // toggleButton.innerText = `Show NEW Replies (${numberOfReplies})`;
       }
     } else {
       // If there are no replies, remove the button if it exists
