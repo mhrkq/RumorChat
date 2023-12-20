@@ -206,20 +206,30 @@
   const updateCollapseButton = (commentId, hasReplies) => {
     const toggleButton = document.getElementById(`toggle_${commentId}`);
     const repliesDiv = document.getElementById(`replies_${commentId}`);
-    
+    const commentDiv = document.getElementById(`comment_${commentId}`);
+
     if (hasReplies) {
       const numberOfReplies = repliesDiv ? repliesDiv.children.length : 0;
-      if (!toggleButton) {
-        // If the button doesn't exist, create it
+      if (!toggleButton && commentDiv) {
+        // If the button doesn't exist, create it and append it in the right place
         const newToggleButton = document.createElement('button');
         newToggleButton.id = `toggle_${commentId}`;
-        newToggleButton.innerText = `Collapse Replies (${numberOfReplies})`;
+        newToggleButton.innerText = `Show Replies (${numberOfReplies})`;
         newToggleButton.onclick = () => toggleReplies(commentId);
-        const commentDiv = document.getElementById(`comment_${commentId}`);
-        commentDiv.appendChild(newToggleButton);
-      } else {
+
+        // Append the new button after the reply and report buttons
+        const replyButton = commentDiv.querySelector(`#reply_${commentId}`);
+        const reportButton = commentDiv.querySelector(`button[onclick*='showReportForm(${commentId}']`);
+        if (reportButton) {
+          reportButton.insertAdjacentElement('afterend', newToggleButton);
+        } else if (replyButton) {
+          replyButton.insertAdjacentElement('afterend', newToggleButton);
+        } else {
+          commentDiv.appendChild(newToggleButton); // Fallback append
+        }
+      } else if (toggleButton) {
         // Update the existing button text
-        toggleButton.innerText = `Collapse Replies (${numberOfReplies})`;
+        toggleButton.innerText = `Show Replies (${numberOfReplies})`;
       }
     } else {
       // If there are no replies, remove the button if it exists
@@ -419,19 +429,22 @@
   socketio.on("new_comment", (data) => {
     // Check if the new comment is a reply (has a parent_id)
     if (data.parent_id) {
-        // Find the parent comment's replies container
-        const parentRepliesContainer = document.getElementById(`replies_${data.parent_id}`);
-        if (parentRepliesContainer) {
-            // Calculate the depth of the new comment based on the parent comment's depth
-            const parentCommentElement = document.getElementById(`comment_${data.parent_id}`);
-            const depth = parseInt(parentCommentElement.getAttribute('data-depth')) + 1;
+      // Find the parent comment's replies container
+      const parentRepliesContainer = document.getElementById(`replies_${data.parent_id}`);
+      if (parentRepliesContainer) {
+        // Calculate the depth of the new comment based on the parent comment's depth
+        const parentCommentElement = document.getElementById(`comment_${data.parent_id}`);
+        const depth = parseInt(parentCommentElement.getAttribute('data-depth')) + 1;
 
-            // Create and append the new reply comment
-            createComment(data, parentRepliesContainer, depth);
-        }
+        // Create and append the new reply comment
+        createComment(data, parentRepliesContainer, depth);
+
+        // Update the collapse button for the parent comment
+        updateCollapseButton(data.parent_id, true);
+      }
     } else {
-        // If it's a top-level comment, append it to the main comments container
-        createComment(data, document.getElementById("comments"), 0);
+      // If it's a top-level comment, append it to the main comments container
+      createComment(data, document.getElementById("comments"), 0);
     }
   });
 
