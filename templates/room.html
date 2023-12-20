@@ -156,6 +156,10 @@
         reportButtonHtml = `<span>(You reported this comment)</span>`;
         reportButtonHtml.disabled = true;
       }
+      // Check if there are replies to determine the initial state of the replies section
+      const repliesDisplayStyle = (commentData.replies && commentData.replies.length > 0) ? 'block' : 'none';
+      const toggleButtonText = (commentData.replies && commentData.replies.length > 0) ? 'Collapse Replies' : 'Show Replies';
+      
       commentElement.id = `comment_${commentData.id}`;
       commentElement.className = 'comment';
       commentElement.setAttribute('data-user-vote', commentData.userVote);
@@ -175,9 +179,13 @@
           <div>
             <button id='reply_${commentData.id}' class='reply-btn' onclick='handleReply(${commentData.id}, "${commentData.username}", "${commentData.text.replace(/"/g, '\\"')}", "${commentData.timestamp}")'>Reply</button>
             ${reportButtonHtml}
+            <button id='toggle_${commentData.id}' onclick='toggleReplies(${commentData.id})'>${toggleButtonText}</button>
           </div>
-          <div id='replies_${commentData.id}' class='replies'></div>
+          <div id='replies_${commentData.id}' class='replies' style='display: ${repliesDisplayStyle};'></div>
+          
       `;
+
+      
 
       // Append replies if they exist
       if (commentData.replies) {
@@ -192,6 +200,26 @@
       // Apply "voted" class if needed
       applyVoteStyles(commentData.id, commentData.userVote);
     };
+
+  const updateCollapseButton = (commentId, hasReplies) => {
+    const toggleButton = document.getElementById(`toggle_${commentId}`);
+    if (hasReplies) {
+      if (!toggleButton) {
+        // If the button doesn't exist, create it
+        const newToggleButton = document.createElement('button');
+        newToggleButton.id = `toggle_${commentId}`;
+        newToggleButton.innerText = 'Collapse Replies';
+        newToggleButton.onclick = () => toggleReplies(commentId);
+        const commentDiv = document.getElementById(`comment_${commentId}`);
+        commentDiv.appendChild(newToggleButton);
+      }
+    } else {
+      // If there are no replies, remove the button if it exists
+      if (toggleButton) {
+        toggleButton.remove();
+      }
+    }
+  };
 
   const applyVoteStyles = (commentId, userVote) => {
       console.log(`Applying vote styles for comment ${commentId}, userVote: ${userVote}`);
@@ -264,7 +292,13 @@
 
   // Function to submit a new comment
   const submitComment = () => {
-    var text = document.getElementById('new-comment-text').value;
+    var text = document.getElementById('new-comment-text').value.trim();
+  
+    // Check if the text is empty
+    if (!text) {
+      alert("Comment cannot be empty.");
+      return;
+    }
     socketio.emit('submit_comment', { text: text, parent_id: currentlyReplyingTo });
     document.getElementById('new-comment-text').value = '';
     currentlyReplyingTo = null;
@@ -392,6 +426,20 @@
         createComment(data, document.getElementById("comments"), 0);
     }
   });
+
+  // Function to toggle the visibility of replies
+  const toggleReplies = (commentId) => {
+    var repliesDiv = document.getElementById(`replies_${commentId}`);
+    var toggleButton = document.getElementById(`toggle_${commentId}`);
+
+    if (repliesDiv.style.display === 'none' || repliesDiv.style.display === '') {
+      repliesDiv.style.display = 'block';
+      toggleButton.textContent = 'Collapse Replies';
+    } else {
+      repliesDiv.style.display = 'none';
+      toggleButton.textContent = 'Show Replies';
+    }
+  };
 
   socketio.on("memberChange", (membersArr) => {
     // display the members, updating the members div with the member names
