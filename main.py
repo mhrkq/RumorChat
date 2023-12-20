@@ -94,14 +94,12 @@ class Rooms(db.Model):
     # Relationship
     messages = db.relationship("Messages", backref="room_info", lazy=True)
 
-
 class Messages(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     room_code = db.Column(db.String, db.ForeignKey("rooms.code"), nullable=False)
     name = db.Column(db.String, nullable=False)
     message = db.Column(db.String, nullable=False)
     date = db.Column(db.DateTime, nullable=False)
-
 
 class ChatbotMessages(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -562,10 +560,14 @@ def handle_vote(data):
 def fetch_comments_with_replies(room_code, comment_id=None):
     comments = Comments.query.filter_by(parent_id=comment_id, room_code=room_code).order_by(Comments.timestamp).all()
     comments_data = []
+    current_username = session.get("name")
     for comment in comments:
         replies = fetch_comments_with_replies(room_code, comment_id=comment.id)
-        user_vote_obj = CommentVotes.query.filter_by(comment_id=comment.id, username=session.get("name")).first()
+        user_vote_obj = CommentVotes.query.filter_by(comment_id=comment.id, username=current_username).first()
         user_vote = user_vote_obj.vote if user_vote_obj else 0
+        
+        # Check if the current user has reported this comment
+        reported_by_user = CommentReports.query.filter_by(comment_id=comment.id, reporter_username=current_username).first() is not None
         comments_data.append({
             "id": comment.id,
             "text": comment.text,
@@ -574,7 +576,8 @@ def fetch_comments_with_replies(room_code, comment_id=None):
             "votes": comment.votes,
             "userVote": user_vote,
             "profile_picture": profile_pictures.get(comment.username, ""),
-            "replies": replies
+            "replies": replies,
+            "reportedByUser": reported_by_user 
         })
     return comments_data
 
@@ -584,6 +587,11 @@ def submit_report():
     reporter_username = session.get("name")
     reason = request.form.get("reason")
 
+    # Check for existing report
+    existing_report = CommentReports.query.filter_by(comment_id=comment_id, reporter_username=reporter_username).first()
+    if existing_report:
+        return jsonify({"success": False, "message": "You have already reported this comment"})
+
     if not comment_id or not reporter_username or not reason:
         return jsonify({"success": False, "message": "Missing report details"})
 
@@ -591,8 +599,6 @@ def submit_report():
     db.session.add(new_report)
     db.session.commit()
     
-    print(f"New report added: {new_report}")
-
     return jsonify({"success": True, "message": "Report submitted successfully"})
 
 ##################################################

@@ -5,11 +5,6 @@
     <div class="comment-box">
       <h2>Comments</h2>
       <div class="comments" id="comments"></div>
-      <div class="inputs">
-        <input type="text" rows="3" name="new-comment-text" id="new-comment-text" placeholder="Post your comments" onkeyup="checkEnterComment(event)"/>
-        <button type="button" name="send-comment" id="send-btn-comment" onclick="submitComment()">Submit Comment</button>
-        <button id="cancel-reply-btn" style="display: none;" onclick="cancelReply()">Cancel Reply</button>
-      </div>
       <div id="report-form" style="display: none;">
         <h3>Report Comment</h3>
         <div id="report-comment-details"></div>
@@ -20,6 +15,12 @@
           <button type="button" onclick="hideReportForm()">Cancel Report</button>
         </form>
       </div>
+      <div class="inputs">
+        <input type="text" rows="3" name="new-comment-text" id="new-comment-text" placeholder="Post your comments" onkeyup="checkEnterComment(event)"/>
+        <button type="button" name="send-comment" id="send-btn-comment" onclick="submitComment()">Submit Comment</button>
+        <button id="cancel-reply-btn" style="display: none;" onclick="cancelReply()">Cancel Reply</button>
+      </div>
+      
     </div>
     <div class="members-box">
       <h2>Members</h2>
@@ -149,8 +150,12 @@
       var upvoteClass = commentData.userVote == 1 ? "voted" : "";
       var downvoteClass = commentData.userVote == -1 ? "voted" : "";
       var commentElement = document.createElement('div');
+      
       var reportButtonHtml = `<button onclick='showReportForm(${commentData.id}, "${commentData.username}", "${commentData.text.replace(/"/g, '\\"')}", "${commentData.timestamp}")'>Report</button>`;
-
+      if (commentData.reportedByUser) {
+        reportButtonHtml = `<span>(You reported this comment)</span>`;
+        reportButtonHtml.disabled = true;
+      }
       commentElement.id = `comment_${commentData.id}`;
       commentElement.className = 'comment';
       commentElement.setAttribute('data-user-vote', commentData.userVote);
@@ -169,7 +174,7 @@
           </div>
           <div>
             <button id='reply_${commentData.id}' class='reply-btn' onclick='handleReply(${commentData.id}, "${commentData.username}", "${commentData.text.replace(/"/g, '\\"')}", "${commentData.timestamp}")'>Reply</button>
-            <button onclick='showReportForm(${commentData.id}, "${commentData.username}", "${commentData.text.replace(/"/g, '\\"')}", "${commentData.timestamp}")'>Report</button>
+            ${reportButtonHtml}
           </div>
           <div id='replies_${commentData.id}' class='replies'></div>
       `;
@@ -264,7 +269,9 @@
     document.getElementById('new-comment-text').value = '';
     currentlyReplyingTo = null;
     updateReplyButtonStyles();
-    scrollToBottomChatbot();
+    cancelReply();
+    scrollToBottomComment();
+    
   };
 
 
@@ -324,6 +331,9 @@
     document.getElementById('report-comment-details').textContent = `Reporting comment by ${username}: "${text}" at ${timestamp}`;
     // Show the report form
     document.getElementById('report-form').style.display = 'block';
+    // Disable the report button if the user has already reported this comment
+    const reportButton = document.getElementById(`report-btn-${commentId}`);
+    if (reportButton) reportButton.disabled = true;
   };
 
   const submitReport = () => {
@@ -339,6 +349,14 @@
     .then(data => {
       if (data.success) {
         alert('Report submitted successfully');
+        // Update the report button for this comment
+        const commentElement = document.getElementById(`comment_${commentId}`);
+        if (commentElement) {
+          const reportButton = commentElement.querySelector(`button[onclick*='showReportForm(${commentId}']`);
+          if (reportButton) {
+            reportButton.outerHTML = '<span>(You reported this comment)</span>';
+          }
+        }
       } else {
         alert('Failed to submit report: ' + data.message);
       }
@@ -612,6 +630,7 @@
         votes: '{{ comment.votes }}',
         userVote: '{{ comment.userVote }}',
         profile_picture: '{{ profile_pictures[comment.username] if comment.username in profile_pictures else '' }}',
+        reportedByUser: {{ comment.reportedByUser | lower }},
         replies: {{ comment.replies | tojson | safe }}
     };
     createTopLevelComment(commentData);
