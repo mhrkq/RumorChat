@@ -131,6 +131,16 @@ class CommentVotes(db.Model):
     def __repr__(self):
         return f'<CommentVotes {self.username} {self.vote}>'
 
+class CommentReports(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    comment_id = db.Column(db.Integer, db.ForeignKey('comments.id'), nullable=False)
+    reporter_username = db.Column(db.String, nullable=False)
+    reason = db.Column(db.String, nullable=False)
+    date_reported = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<CommentReport {self.comment_id} \n Reported by {self.reporter_username} on {self.date_reported} \n Reason: {self.reason}>'    
+
 
 # initialisation object for socketio library
 socketio = SocketIO(app, async_mode="eventlet", cors_allowed_origins="*")
@@ -568,6 +578,22 @@ def fetch_comments_with_replies(room_code, comment_id=None):
         })
     return comments_data
 
+@app.route("/submit_report", methods=["POST"])
+def submit_report():
+    comment_id = request.form.get("comment_id")
+    reporter_username = session.get("name")
+    reason = request.form.get("reason")
+
+    if not comment_id or not reporter_username or not reason:
+        return jsonify({"success": False, "message": "Missing report details"})
+
+    new_report = CommentReports(comment_id=comment_id, reporter_username=reporter_username, reason=reason)
+    db.session.add(new_report)
+    db.session.commit()
+    
+    print(f"New report added: {new_report}")
+
+    return jsonify({"success": True, "message": "Report submitted successfully"})
 
 ##################################################
 

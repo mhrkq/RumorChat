@@ -3,12 +3,23 @@
 <div class="parent-container">
   <div class="room-box-comments">
     <div class="comment-box">
-        <h2>Comments</h2>
-        <div class="comments" id="comments"></div>
-        <div class="inputs">
-            <input type="text" rows="3" name="new-comment-text" id="new-comment-text" placeholder="Post your comments" onkeyup="checkEnterComment(event)"/>
-            <button type="button" name="send-comment" id="send-btn-comment" onclick="submitComment()">Submit Comment</button>
-        </div>
+      <h2>Comments</h2>
+      <div class="comments" id="comments"></div>
+      <div class="inputs">
+        <input type="text" rows="3" name="new-comment-text" id="new-comment-text" placeholder="Post your comments" onkeyup="checkEnterComment(event)"/>
+        <button type="button" name="send-comment" id="send-btn-comment" onclick="submitComment()">Submit Comment</button>
+        <button id="cancel-reply-btn" style="display: none;" onclick="cancelReply()">Cancel Reply</button>
+      </div>
+      <div id="report-form" style="display: none;">
+        <h3>Report Comment</h3>
+        <div id="report-comment-details"></div>
+        <form onsubmit="submitReport(); return false;">
+          <input type="hidden" id="report-comment-id" name="comment_id">
+          <textarea id="report-reason" name="reason" placeholder="Enter your report reason" required></textarea>
+          <button type="submit">Submit Report</button>
+          <button type="button" onclick="hideReportForm()">Cancel Report</button>
+        </form>
+      </div>
     </div>
     <div class="members-box">
       <h2>Members</h2>
@@ -138,21 +149,28 @@
       var upvoteClass = commentData.userVote == 1 ? "voted" : "";
       var downvoteClass = commentData.userVote == -1 ? "voted" : "";
       var commentElement = document.createElement('div');
+      var reportButtonHtml = `<button onclick='showReportForm(${commentData.id}, "${commentData.username}", "${commentData.text.replace(/"/g, '\\"')}", "${commentData.timestamp}")'>Report</button>`;
+
       commentElement.id = `comment_${commentData.id}`;
       commentElement.className = 'comment';
       commentElement.setAttribute('data-user-vote', commentData.userVote);
       commentElement.setAttribute('data-depth', depth);
-      commentElement.style.marginLeft = `${depth * 20}px`;
+      commentElement.style.marginLeft = `${depth * 5}px`;
       commentElement.innerHTML = `
-          <div><img src='data:image/png;base64,${commentData.profile_picture}' alt='Profile Picture'></div>
-          <div><strong>${commentData.username}</strong>: ${commentData.text}</div>
+          <div>
+            <img src='data:image/png;base64,${commentData.profile_picture}' alt='Profile Picture'>
+            <strong>${commentData.username}</strong>: ${commentData.text}
+          </div>
           <div class='timestamp'>${commentData.timestamp}</div>
           <div class='votes'>
-              <i class='fa fa-thumbs-up ${upvoteClass}' onclick='voteComment(${commentData.id}, 1)'></i>
-              <span id='votes_${commentData.id}'>${commentData.votes}</span>
-              <i class='fa fa-thumbs-down ${downvoteClass}' onclick='voteComment(${commentData.id}, -1)'></i>
+            <i class='fa fa-thumbs-up ${upvoteClass}' onclick='voteComment(${commentData.id}, 1)'></i>
+            <span id='votes_${commentData.id}'>${commentData.votes}</span>
+            <i class='fa fa-thumbs-down ${downvoteClass}' onclick='voteComment(${commentData.id}, -1)'></i>
           </div>
-          <button id='reply_${commentData.id}' class='reply-btn' onclick='handleReply(${commentData.id}, "${commentData.username}", "${commentData.text.replace(/"/g, '\\"')}", "${commentData.timestamp}")'>Reply</button>
+          <div>
+            <button id='reply_${commentData.id}' class='reply-btn' onclick='handleReply(${commentData.id}, "${commentData.username}", "${commentData.text.replace(/"/g, '\\"')}", "${commentData.timestamp}")'>Reply</button>
+            <button onclick='showReportForm(${commentData.id}, "${commentData.username}", "${commentData.text.replace(/"/g, '\\"')}", "${commentData.timestamp}")'>Report</button>
+          </div>
           <div id='replies_${commentData.id}' class='replies'></div>
       `;
 
@@ -200,40 +218,37 @@
   // Function for replying to comments
   var currentlyReplyingTo = null;
 
-  const replyComment = (commentId, username, text, timestamp) => {
-      const replyInfoDiv = document.getElementById("reply-info");
-      if (currentlyReplyingTo !== commentId) {
-          currentlyReplyingTo = commentId;
-          replyInfoDiv.innerHTML = `Replying to ${username}: "${text}" at ${timestamp}`;
-      } else {
-          currentlyReplyingTo = null;
-          replyInfoDiv.innerHTML = '';
-      }
-  };
-
   // Function to update the reply button styles
   const updateReplyButtonStyles = () => {
-      document.querySelectorAll(".comment button.reply-btn").forEach(button => {
-          button.classList.remove("highlighted");
-      });
-      if (currentlyReplyingTo) {
-          const replyButton = document.getElementById(`reply_${currentlyReplyingTo}`);
-          if (replyButton) {
-              replyButton.classList.add("highlighted");
-          }
+    document.querySelectorAll(".comment button.reply-btn").forEach(button => {
+        button.classList.remove("highlighted");
+    });
+    if (currentlyReplyingTo) {
+      const replyButton = document.getElementById(`reply_${currentlyReplyingTo}`);
+      if (replyButton) {
+        replyButton.classList.add("highlighted");
       }
+    }
   };
 
   // Function to handle a reply to a comment
   const handleReply = (commentId, username, text, timestamp) => {
-      if (currentlyReplyingTo !== commentId) {
-          currentlyReplyingTo = commentId;
-          document.getElementById("new-comment-text").placeholder = `Replying to ${username}: "${text}" at ${timestamp}`;
-      } else {
-          currentlyReplyingTo = null;
-          document.getElementById("new-comment-text").placeholder = "Post your comments";
-      }
-      updateReplyButtonStyles();
+    if (currentlyReplyingTo !== commentId) {
+      currentlyReplyingTo = commentId;
+      document.getElementById("new-comment-text").placeholder = `Replying to ${username}: "${text}" at ${timestamp}`;
+      document.getElementById("cancel-reply-btn").style.display = 'inline';  // Show cancel button
+    } else {
+      cancelReply();
+    }
+    updateReplyButtonStyles();
+  };
+
+  const cancelReply = () => {
+    currentlyReplyingTo = null;
+    document.getElementById("new-comment-text").placeholder = "Post your comments";
+    //document.getElementById("reply-info").innerHTML = '';
+    document.getElementById("cancel-reply-btn").style.display = 'none';  // Hide cancel button
+    updateReplyButtonStyles();
   };
 
 
@@ -300,6 +315,46 @@
         }, 0);
     }
   });
+
+  // Report Stuff
+
+  const showReportForm = (commentId, username, text, timestamp) => {
+    // Populate the report form with comment details
+    document.getElementById('report-comment-id').value = commentId;
+    document.getElementById('report-comment-details').textContent = `Reporting comment by ${username}: "${text}" at ${timestamp}`;
+    // Show the report form
+    document.getElementById('report-form').style.display = 'block';
+  };
+
+  const submitReport = () => {
+    const commentId = document.getElementById('report-comment-id').value;
+    const reason = document.getElementById('report-reason').value;
+
+    fetch('/submit_report', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: `comment_id=${commentId}&reason=${encodeURIComponent(reason)}`
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        alert('Report submitted successfully');
+      } else {
+        alert('Failed to submit report: ' + data.message);
+      }
+    });
+
+    // Hide the report form and clear fields
+    document.getElementById('report-form').style.display = 'none';
+    document.getElementById('report-comment-id').value = '';
+    document.getElementById('report-reason').value = '';
+  };
+
+  const hideReportForm = () => {
+    document.getElementById('report-form').style.display = 'none';
+    document.getElementById('report-comment-id').value = '';
+    document.getElementById('report-reason').value = '';
+  };
 
   socketio.on("new_comment", (data) => {
     // Check if the new comment is a reply (has a parent_id)
@@ -410,8 +465,8 @@
       });
   };
 
-// Called after all comments are loaded
-setTimeout(applyVoteStylesToAllComments, 0);
+  // Called after all comments are loaded
+  setTimeout(applyVoteStylesToAllComments, 0);
 
   function createNewSession() {
     // socketio.emit('heartbeat', { room: room_code, name: curr_name});

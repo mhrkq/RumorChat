@@ -238,6 +238,11 @@ h2 {
   padding-right: 10px;
 }
 
+.comment {
+  padding-left: 10px;
+
+}
+
 .chatbot-text {
   display: flex;
   flex-direction: row;
