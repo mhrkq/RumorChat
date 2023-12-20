@@ -158,7 +158,10 @@
       }
       // Check if there are replies to determine the initial state of the replies section
       const repliesDisplayStyle = (commentData.replies && commentData.replies.length > 0) ? 'block' : 'none';
-      const toggleButtonText = (commentData.replies && commentData.replies.length > 0) ? 'Collapse Replies' : 'Show Replies';
+      var toggleRepliesButtonHtml = '';
+      if (commentData.replies && commentData.replies.length > 0) {
+        toggleRepliesButtonHtml = `<button id='toggle_${commentData.id}' onclick='toggleReplies(${commentData.id})'>Collapse Replies (${commentData.replies.length})</button>`;
+      }
       
       commentElement.id = `comment_${commentData.id}`;
       commentElement.className = 'comment';
@@ -179,7 +182,7 @@
           <div>
             <button id='reply_${commentData.id}' class='reply-btn' onclick='handleReply(${commentData.id}, "${commentData.username}", "${commentData.text.replace(/"/g, '\\"')}", "${commentData.timestamp}")'>Reply</button>
             ${reportButtonHtml}
-            <button id='toggle_${commentData.id}' onclick='toggleReplies(${commentData.id})'>${toggleButtonText}</button>
+            ${toggleRepliesButtonHtml}
           </div>
           <div id='replies_${commentData.id}' class='replies' style='display: ${repliesDisplayStyle};'></div>
           
@@ -203,15 +206,21 @@
 
   const updateCollapseButton = (commentId, hasReplies) => {
     const toggleButton = document.getElementById(`toggle_${commentId}`);
+    const repliesDiv = document.getElementById(`replies_${commentId}`);
+    
     if (hasReplies) {
+      const numberOfReplies = repliesDiv ? repliesDiv.children.length : 0;
       if (!toggleButton) {
         // If the button doesn't exist, create it
         const newToggleButton = document.createElement('button');
         newToggleButton.id = `toggle_${commentId}`;
-        newToggleButton.innerText = 'Collapse Replies';
+        newToggleButton.innerText = `Collapse Replies (${numberOfReplies})`;
         newToggleButton.onclick = () => toggleReplies(commentId);
         const commentDiv = document.getElementById(`comment_${commentId}`);
         commentDiv.appendChild(newToggleButton);
+      } else {
+        // Update the existing button text
+        toggleButton.innerText = `Collapse Replies (${numberOfReplies})`;
       }
     } else {
       // If there are no replies, remove the button if it exists
@@ -431,13 +440,14 @@
   const toggleReplies = (commentId) => {
     var repliesDiv = document.getElementById(`replies_${commentId}`);
     var toggleButton = document.getElementById(`toggle_${commentId}`);
+    var numberOfReplies = repliesDiv.children.length;
 
     if (repliesDiv.style.display === 'none' || repliesDiv.style.display === '') {
       repliesDiv.style.display = 'block';
-      toggleButton.textContent = 'Collapse Replies';
+      toggleButton.textContent = `Collapse Replies (${numberOfReplies})`;
     } else {
       repliesDiv.style.display = 'none';
-      toggleButton.textContent = 'Show Replies';
+      toggleButton.textContent = `Show Replies (${numberOfReplies})`;
     }
   };
 
