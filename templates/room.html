@@ -41,7 +41,7 @@
     </div>
     <div class="room-box-chatbot">
     <div class="sessions-box">
-      <h2>Sessions</h2>
+      <h2>LLM Sessions</h2>
       <div class="sessions" id="sessions">
         {% for session_number in range(1, max_session+1) %}
           <div class="session-item" data-session="{{ session_number }}" onclick="setCurrentSession({{ session_number }})">
@@ -52,7 +52,7 @@
       <button type="button" id="new-session-btn" onclick="createNewSession()">Create New Session</button>
     </div>
     <div class="message-box-chatbot">
-      <h2>Personal Chatbot</h2>
+      <h2>Personal LLM Chatbot</h2>
       <div class="messages-chatbot" id="messages-chatbot"></div>
       <div class="inputs">
         <input type="text" rows="3" name="message-chatbot" id="message-chatbot" placeholder="Message for chatbot" onkeyup="checkEnterChatbot(event)"/>
@@ -61,12 +61,7 @@
         </button>
       </div>
     </div>
-  </div>
-    <div class="hidden-box">
-      <h2>Members</h2>
-      <div class="members" id="members"></div>
-    </div>
-  </div>
+
   
   
 </div>

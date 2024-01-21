@@ -28,10 +28,10 @@
   border-style: solid;
   border-radius: 10px;
   background-color: whitesmoke;
-  height: 300px;
+  height: 45vh;
   display: flex;
   flex-direction: column;
-  width: 35vw;
+  width: 40vw;
   align-items: stretch;
 }
 
@@ -41,7 +41,7 @@
   border-style: solid;
   border-radius: 10px;
   background-color: whitesmoke;
-  height: 300px;
+  height: 45vh;
   display: flex;
   flex-direction: column;
   width: 80vw;
@@ -106,7 +106,7 @@
   height: 45vh;
   display: flex;
   flex-direction: column;
-  width: 35vw;
+  width: 40vw;
   align-items: stretch;
 }
 
@@ -215,6 +215,7 @@
 
 h2 {
   text-align: center;
+  margin: 0;
 }
 
 #message {
