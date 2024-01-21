@@ -60,8 +60,9 @@ DB_PASSWORD = os.getenv("DB_PASSWORD")
 
 DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@localhost/{DB_NAME}"
 
+# CHATBOT_HOST = "127.0.0.1:6000"
 CHATBOT_HOST = "172.17.0.1:6000"
-CHATBOT_URI = f"http://{CHATBOT_HOST}/api/v1/chat"
+CHATBOT_URI = f"http://{CHATBOT_HOST}/v1/chat/completions"
 
 # k is the number of messages to retrieve on each new session
 k = 5
@@ -977,7 +978,7 @@ def background_task(name, sid, session_id, room_code, prompt):
         # k is the number of messages to retrieve
 
         full_prompt = ""
-        history = {"internal": [], "visible": []}
+        history = []
         chatbot_history = retrieve_chatbot_history(name, session_id)
 
         # TODO: Copy the retrieval of the chatbot history to the chatbot_req event handler as well to inform the user of what
@@ -1000,12 +1001,18 @@ def background_task(name, sid, session_id, room_code, prompt):
 
         else:
             # chatbot_history_msg = '\n'.join([f"{msg['name']}: {msg['message']}" for msg in chatbot_history])
-            history["internal"] = form_message_pairs(chatbot_history)
+            message_pairs = form_message_pairs(chatbot_history)
+            for pairs in message_pairs:
+                user_msg = pairs[0]
+                chatbot_msg = pairs[1]
+                history.append({"role": "user", "content": user_msg})
+                history.append({"role": "assistant", "content": chatbot_msg})
             # prepended_msg = chatbot_history_msg + "\n" + prepended_msg
             # full_prompt += chatbot_history_msg + "\n"
             # full_prompt +=  f"Here is the user's ({name}'s) latest prompt: {prompt}"
             full_prompt = prompt
-
+        history.append({"role": "user", "content": full_prompt})
+        print(f"History: {history}")
         # For now, we will spoof the chatbot response after 5 seconds
         ############################
         # TODO: Replace this with API call, respond using the prompt
@@ -1015,70 +1022,70 @@ def background_task(name, sid, session_id, room_code, prompt):
         # response = f"Hello, I am your chatbot. Here is your full prompt: \n {full_prompt}"  # Replace this with API call, respond using the prompt
         print(f"Sending {name}'s request to chatbot api: {full_prompt}")
         request_data = {
-            "user_input": full_prompt,
+            # "user_input": full_prompt,
             "max_new_tokens": 500,
             "auto_max_new_tokens": False,
             "max_tokens_second": 0,
-            "history": history,
-            "mode": "instruct",  # Valid options: 'chat', 'chat-instruct', 'instruct'
-            "character": "Example",
-            "instruction_template": "Vicuna-v1.1",  # Will get autodetected if unset
-            "your_name": "You",
-            # 'name1': 'name of user', # Optional
-            # 'name2': 'name of character', # Optional
-            # 'context': 'character context', # Optional
-            # 'greeting': 'greeting', # Optional
-            "name1_instruct": "USER:",  # Optional
-            "name2_instruct": "ASSISTANT:",  # Optional
-            "context_instruct": "A chat between a curious user and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.\n\n",  # Optional
-            "turn_template": "<|user|> <|user-message|>\n<|bot|> <|bot-message|></s>\n",  # Optional
-            "regenerate": False,
-            "_continue": False,
-            "chat_instruct_command": 'Continue the chat dialogue below. Write a single reply for the character "<|character|>".\n\n<|prompt|>',
-            # Generation params. If 'preset' is set to different than 'None', the values
-            # in presets/preset-name.yaml are used instead of the individual numbers.
-            "preset": "None",
-            "do_sample": True,
-            "temperature": 0.7,
-            "top_p": 0.1,
-            "typical_p": 1,
-            "epsilon_cutoff": 0,  # In units of 1e-4
-            "eta_cutoff": 0,  # In units of 1e-4
-            "tfs": 1,
-            "top_a": 0,
-            "repetition_penalty": 1.18,
-            "repetition_penalty_range": 0,
-            "top_k": 40,
-            "min_length": 0,
-            "no_repeat_ngram_size": 0,
-            "num_beams": 1,
-            "penalty_alpha": 0,
-            "length_penalty": 1,
-            "early_stopping": False,
-            "mirostat_mode": 0,
-            "mirostat_tau": 5,
-            "mirostat_eta": 0.1,
-            "grammar_string": "",
-            "guidance_scale": 1,
-            "negative_prompt": "",
-            "seed": -1,
-            "add_bos_token": True,
-            "truncation_length": 2048,
-            "ban_eos_token": False,
-            "custom_token_bans": "",
-            "skip_special_tokens": True,
-            "stopping_strings": [],
+            "messages": history,
+            "mode": "chat-instruct",  # Valid options: 'chat', 'chat-instruct', 'instruct'
+            # # "character": "Example",
+            # # "instruction_template": "Vicuna-v1.1",  # Will get autodetected if unset
+            # # "your_name": "You",
+            # # 'name1': 'name of user', # Optional
+            # # 'name2': 'name of character', # Optional
+            # # 'context': 'character context', # Optional
+            # # 'greeting': 'greeting', # Optional
+            # # "name1_instruct": "USER:",  # Optional
+            # # "name2_instruct": "ASSISTANT:",  # Optional
+            # # "context_instruct": "A chat between a curious user and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.\n\n",  # Optional
+            # # "turn_template": "<|user|> <|user-message|>\n<|bot|> <|bot-message|></s>\n",  # Optional
+            # "regenerate": False,
+            # "_continue": False,
+            # # "chat_instruct_command": 'Continue the chat dialogue below. Write a single reply for the character "<|character|>".\n\n<|prompt|>',
+            # # Generation params. If 'preset' is set to different than 'None', the values
+            # # in presets/preset-name.yaml are used instead of the individual numbers.
+            # "preset": "None",
+            # "do_sample": True,
+            # "temperature": 0.7,
+            # "top_p": 0.1,
+            # "typical_p": 1,
+            # "epsilon_cutoff": 0,  # In units of 1e-4
+            # "eta_cutoff": 0,  # In units of 1e-4
+            # "tfs": 1,
+            # "top_a": 0,
+            # "repetition_penalty": 1.18,
+            # "repetition_penalty_range": 0,
+            # "top_k": 40,
+            # "min_length": 0,
+            # "no_repeat_ngram_size": 0,
+            # "num_beams": 1,
+            # "penalty_alpha": 0,
+            # "length_penalty": 1,
+            # "early_stopping": False,
+            # "mirostat_mode": 0,
+            # "mirostat_tau": 5,
+            # "mirostat_eta": 0.1,
+            # "grammar_string": "",
+            # "guidance_scale": 1,
+            # "negative_prompt": "",
+            # "seed": -1,
+            # "add_bos_token": True,
+            # "truncation_length": 2048,
+            # "ban_eos_token": False,
+            # "custom_token_bans": "",
+            # "skip_special_tokens": True,
+            # "stopping_strings": [],
         }
 
         try:
             response = requests.post(CHATBOT_URI, json=request_data)
+            # print(f"Response: {response.json()}")
 
             # Check if the response is successful and extract the chatbot's reply
             if response.status_code == 200:
-                results = response.json()["results"]
-                chatbot_reply = results[0]["history"]["visible"][-1][1]
+                chatbot_reply = response.json()['choices'][0]['message']['content']
             else:
-                print(response)
+                # print(response)
                 chatbot_reply = f"Sorry, I couldn't process your request due to response.status_code: {response.status_code}. You said: {prompt}"
         except Exception as e:
             print("Exception occured: ", e)

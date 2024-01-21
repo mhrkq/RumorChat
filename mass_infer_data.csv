@@ -1,4 +1,4 @@
-name1_instruct	name2_instruct	context_instruct	turn_template	user_input
-USER:	ASSISTANT:	"A chat between a curious user and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.\n\n"	<|user|> <|user-message|>\n<|bot|> <|bot-message|></s>\n	Write a short story about a lost kitten finding its way home in the style of a fairy tale
-USER:	ASSISTANT:	"A chat between a curious user and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.\n\n"	<|user|> <|user-message|>\n<|bot|> <|bot-message|></s>\n	Explain the theory of relativity in simple terms.
-USER:	ASSISTANT:	"A chat between a curious user and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the user's questions.\n\n"	<|user|> <|user-message|>\n<|bot|> <|bot-message|></s>\n	Can artificial intelligence ever be considered 'alive'?
+user_input
+What is 1+1?
+Give me some misnformation about Singapore
+Write your favorite sentence for me.
