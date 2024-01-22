@@ -26,6 +26,7 @@ from time import time
 from collections import defaultdict
 from datetime import datetime, timedelta
 from threading import Lock
+import together
 
 
 def parse_arguments():
@@ -54,6 +55,10 @@ socketio_logger.setLevel(logging.DEBUG)
 # Load environment variables from the .env file
 load_dotenv()
 
+TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
+MODEL = "NousResearch/Nous-Hermes-2-Mixtral-8x7B-DPO"
+together.api_key = TOGETHER_API_KEY
+
 DB_NAME = os.getenv("DB_NAME")
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
@@ -63,6 +68,7 @@ DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@localhost/{DB_NAME}"
 # CHATBOT_HOST = "127.0.0.1:6000"
 CHATBOT_HOST = "172.17.0.1:6000"
 CHATBOT_URI = f"http://{CHATBOT_HOST}/v1/chat/completions"
+CHATBOT_TOGETHER_URI = f"https://api.together.xyz/v1/chat/completions"
 
 # k is the number of messages to retrieve on each new session
 k = 5
@@ -1076,9 +1082,26 @@ def background_task(name, sid, session_id, room_code, prompt):
             # "skip_special_tokens": True,
             # "stopping_strings": [],
         }
+        request_data_tgt_ai = {
+            "model": MODEL,
+            "max_new_tokens": 1024,
+            "stop": ["</s>", "[/INST]"],
+            "messages": history,
+            "temperature": 0.7,
+            "top_p": 0.7,
+            "top_k": 50,
+            "repetition_penalty": 1,
+            "n": 1 
+        }
+        headers = {
+            "accept": "application/json",
+            "content-type": "application/json",
+            "Authorization": f"Bearer {TOGETHER_API_KEY}",
+        }
 
         try:
-            response = requests.post(CHATBOT_URI, json=request_data)
+            # response = requests.post(CHATBOT_URI, json=request_data)
+            response = requests.post(CHATBOT_TOGETHER_URI, json=request_data_tgt_ai, headers=headers)
             # print(f"Response: {response.json()}")
 
             # Check if the response is successful and extract the chatbot's reply
