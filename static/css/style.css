@@ -27,12 +27,17 @@ button {
   background-color: #BEADFA;
   color: #fff;
   border: none;
-  border-radius: 5px;
+  border-radius: 10px;
   cursor: pointer;
 }
 
 button:hover {
+  filter: brightness(0.9)
   background-color: #B983FF;
+}
+
+button:active {
+  transform: translateY(2px);
 }
 
 .buttons {
@@ -44,6 +49,9 @@ button:hover {
 }
 
 .join {
+  padding: 2px;
+  border-radius: 10px;
+  border: none;
   display: flex;
   flex-direction: row;
   width: 100%;
@@ -59,10 +67,11 @@ button:hover {
 
 .message-box {
   border-color: #DFCCFB;
-  border-width: 10px;
+  border-width: 10px; 
   border-style: solid;
   border-radius: 20px;
   background-color: #FFF8C9;
+  padding: 5px 5px;
   height: 45vh;
   display: flex;
   flex-direction: column;
@@ -71,11 +80,12 @@ button:hover {
 }
 
 .message-box-chatbot {
-  border-color: #DFCCFB;
-  border-width: 10px;
+  border-color: #DFCCFB; 
+  border-width: 10px; 
   border-style: solid;
   border-radius: 20px;
   background-color: #FFF8C9;
+  padding: 5px 5px;
   height: 45vh;
   display: flex;
   flex-direction: column;
@@ -102,9 +112,10 @@ button:hover {
 .members-box {
   border-color: #DFCCFB;
   border-width: 10px;
-  border-style: solid;
+  border-style: solid; 
   border-radius: 20px;
   background-color: #FFF8C9;
+  padding: 5px 5px;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -117,10 +128,14 @@ button:hover {
   border-style: solid;
   border-radius: 20px;
   background-color: #FFF8C9;
+  padding: 5px 5px;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   width: 10rem;
+  /* position: absolute;
+  top: 0.5em;
+  right: 0; */
 }
 
 .scrollbox {
@@ -162,9 +177,26 @@ button:hover {
 
 .messages {
   overflow-y: scroll;
-  flex: 1;
+  padding: 1px;
+  border-radius: 2px;
+  margin-bottom: 1px;
+  /* display: flex;
+  flex-direction: column;*/
+  flex: 1; 
   width: 100%;
+  color: hsl(0, 0%, 0%);
 }
+
+/*  .messages-sender {
+  font-weight: bold;
+  margin-bottom: 0.5px;
+}
+
+.messages-text {
+  font-size: 1em;
+  margin-bottom: 0.3em;
+  word-wrap: break-word;
+} */
 
 .messages-chatbot {
   overflow-y: scroll;
@@ -182,14 +214,21 @@ h2 {
 }
 
 #message {
+  padding: 2px;
+  border-radius: 10px;
+  border: none;
   flex: 1;
 }
 
 #message-chatbot {
+  padding: 2px;
+  border-radius: 10px;
+  border: none;
   flex: 1;
 }
 
 .text {
+  border-radius: 6px;
   display: flex;
   flex-direction: row;
   align-items: center;
