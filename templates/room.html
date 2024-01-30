@@ -143,6 +143,12 @@
 
   // Called multiple times to generate and display the comments
   const createComment = (commentData, parentElement, depth = 0) => {
+
+     // Check if this comment already exists
+      if (document.getElementById(`comment_${commentData.id}`)) {
+          return; // Skip adding the comment if it already exists
+      }
+
       var upvoteClass = commentData.userVote == 1 ? "voted" : "";
       var downvoteClass = commentData.userVote == -1 ? "voted" : "";
       var commentElement = document.createElement('div');
@@ -267,6 +273,9 @@
 
   // Use this function to create top-level comments
   const createTopLevelComment = (commentData) => {
+      if (document.getElementById(`comment_${commentData.id}`)) {
+          return; // Skip adding the comment if it already exists
+      }
       createComment(commentData, document.getElementById("comments"), 0);
   };
 
@@ -654,7 +663,6 @@
           sendMessageToChatbot();
       }
   };
-
 
   // When the user clicks on the session
   const loadSessionHistory = (session) => {

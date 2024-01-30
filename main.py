@@ -870,18 +870,18 @@ def chatbot_message(data):
     message = data["message"]
     room = session.get("room")
     chatbot_history = retrieve_chatbot_history(name, session_id)
-    if not chatbot_history:
-        print("chatbot history is empty for chatbot_req")
-        # Retrieving the last k messages; for example, let's take k as 5
-        last_k_msgs = retrieve_last_k_msg(k, room)
-        full_prompt = f"Context: Here are the last {k} messages from various users in the public chatroom. (Note that my username is {name}): \n"
-        # Prepending the last k messages to the prompt with the desired format
-        prepended_msg = "\n".join(
-            [f"{msg['name']}: {msg['message']}" for msg in last_k_msgs]
-        )
-        full_prompt += prepended_msg + "\n"
-        full_prompt += f"Given the above context, follow these instructions: {message}"
-        message = full_prompt
+    # if not chatbot_history:
+    #     print("chatbot history is empty for chatbot_req")
+    #     # Retrieving the last k messages; for example, let's take k as 5
+    #     last_k_msgs = retrieve_last_k_msg(k, room)
+    #     full_prompt = f"Context: Here are the last {k} messages from various users in the public chatroom. (Note that my username is {name}): \n"
+    #     # Prepending the last k messages to the prompt with the desired format
+    #     prepended_msg = "\n".join(
+    #         [f"{msg['name']}: {msg['message']}" for msg in last_k_msgs]
+    #     )
+    #     full_prompt += prepended_msg + "\n"
+    #     full_prompt += f"Given the above context, follow these instructions: {message}"
+    #     message = full_prompt
 
     chatbot_msg = ChatbotMessages(
         name=name, owner=name, session=session_id, message=message, date=datetime.now()
@@ -992,17 +992,18 @@ def background_task(name, sid, session_id, room_code, prompt):
         # Subsequent messages after the first (in a particular session) will retrieve the entire chatbot session message history from the database.
         if not chatbot_history:
             print("No chabot history found")
-            # Retrieving the last k messages; for example, let's take k as 5
-            last_k_msgs = retrieve_last_k_msg(k, room_code)
-            full_prompt += f"Context: Here are the last {len(last_k_msgs)} messages from various users in the public chatroom. (Note that my username is '{name}'): \n"
-            # Prepending the last k messages to the prompt with the desired format
-            prepended_msg = "\n".join(
-                [f"{msg['name']}: {msg['message']}" for msg in last_k_msgs]
-            )
-            full_prompt += prepended_msg + "\n"
-            full_prompt += (
-                f"Given the above context, follow these instructions: {prompt}"
-            )
+            # # Retrieving the last k messages; for example, let's take k as 5
+            # last_k_msgs = retrieve_last_k_msg(k, room_code)
+            # full_prompt += f"Context: Here are the last {len(last_k_msgs)} messages from various users in the public chatroom. (Note that my username is '{name}'): \n"
+            # # Prepending the last k messages to the prompt with the desired format
+            # prepended_msg = "\n".join(
+            #     [f"{msg['name']}: {msg['message']}" for msg in last_k_msgs]
+            # )
+            # full_prompt += prepended_msg + "\n"
+            # full_prompt += (
+            #     f"Given the above context, follow these instructions: {prompt}"
+            # )
+            full_prompt = prompt # For now, we will just send the prompt as is
             # full_prompt += f"Here is the user's ({name}'s) latest prompt: {prompt}"
 
         else:
