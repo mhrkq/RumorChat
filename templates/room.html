@@ -349,6 +349,34 @@
   const voteComment = (commentId, voteValue) => {
     // Emit the vote to the server
     socketio.emit('vote_comment', { comment_id: commentId, vote: voteValue });
+    // Update the button styles locally
+    const commentElement = document.getElementById(`comment_${commentId}`);
+    if (commentElement) {
+        const upvoteButton = commentElement.querySelector(".fa-thumbs-up");
+        const downvoteButton = commentElement.querySelector(".fa-thumbs-down");
+        const currentUserVote = parseInt(commentElement.getAttribute('data-user-vote'));
+
+        // Toggle vote
+        if (voteValue === currentUserVote) {
+            // User is undoing their vote
+            voteValue = 0; // Neutral state
+        }
+
+        // Apply the updated styles based on the new vote value
+        if (voteValue === 1) {
+            upvoteButton.classList.add("voted");
+            downvoteButton.classList.remove("voted");
+        } else if (voteValue === -1) {
+            downvoteButton.classList.add("voted");
+            upvoteButton.classList.remove("voted");
+        } else {
+            upvoteButton.classList.remove("voted");
+            downvoteButton.classList.remove("voted");
+        }
+
+        // Update the data-user-vote attribute to reflect the new vote state
+        commentElement.setAttribute('data-user-vote', voteValue);
+    }
   };
 
   socketio.on("update_vote", (data) => {
@@ -361,31 +389,6 @@
         // console.log("Updated vote count for comment: " + data.comment_id);
     }
 
-    if (commentElement) {
-        const upvoteButton = commentElement.querySelector(".fa-thumbs-up");
-        const downvoteButton = commentElement.querySelector(".fa-thumbs-down");
-        console.log("Found vote buttons for comment: " + data.comment_id);
-        if (upvoteButton && downvoteButton) {
-          console.log("Updating vote buttons for comment: " + data.comment_id)
-            if (data.userVote == 1) {
-                upvoteButton.classList.add("voted");
-                downvoteButton.classList.remove("voted");
-            } else if (data.userVote == -1) {
-                downvoteButton.classList.add("voted");
-                upvoteButton.classList.remove("voted");
-            } else {
-                upvoteButton.classList.remove("voted");
-                downvoteButton.classList.remove("voted");
-            }
-            
-        }
-        // Force a DOM update
-        setTimeout(() => {
-          commentElement.style.display = 'none';
-          commentElement.offsetHeight; // Trigger a reflow
-          commentElement.style.display = '';
-        }, 0);
-    }
   });
 
   // Report Stuff
