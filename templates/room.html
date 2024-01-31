@@ -16,7 +16,7 @@
         </form>
       </div>
       <div class="inputs">
-        <input type="text" rows="3" name="new-comment-text" id="new-comment-text" placeholder="Post your comments" onkeyup="checkEnterComment(event)"/>
+        <textarea rows="2" name="new-comment-text" id="new-comment-text" placeholder="Post your comments" onkeyup="checkEnterComment(event)"></textarea>
         <button type="button" name="send-comment" id="send-btn-comment" onclick="submitComment()">Submit Comment</button>
         <button id="cancel-reply-btn" style="display: none;" onclick="cancelReply()">Cancel Reply</button>
       </div>
@@ -33,7 +33,7 @@
       <div id="name" hidden>{{session['name']}}</div>
       <div class="messages" id="messages"></div>
       <div class="inputs">
-        <input type="text" rows="3" name="message" id="message" placeholder="Message" onkeyup="checkEnter(event)"/>
+        <textarea rows="2" name="message" id="message" placeholder="Message" onkeyup="checkEnter(event)"></textarea>
         <button type="button" name="send" id="send-btn" onclick="sendMessage()">
           Send
         </button>
@@ -55,15 +55,12 @@
       <h2>Personal LLM Chatbot</h2>
       <div class="messages-chatbot" id="messages-chatbot"></div>
       <div class="inputs">
-        <input type="text" rows="3" name="message-chatbot" id="message-chatbot" placeholder="Message for chatbot" onkeyup="checkEnterChatbot(event)"/>
+        <textarea rows="2" name="message-chatbot" id="message-chatbot" placeholder="Message for chatbot" onkeyup="checkEnterChatbot(event)"></textarea>
         <button type="button" name="send-chatbot" id="send-btn-chatbot" onclick="sendMessageToChatbot()">
           Send
         </button>
       </div>
     </div>
-
-  
-  
 </div>
 <script type="text/javascript">
   // When socketio initiated, you directly connect to the socketio server associated
@@ -100,16 +97,27 @@
   };
 
   const checkEnter = (event) => {
-    if (event.key === 'Enter') {
-    sendMessage();
+    if (event.key === 'Enter' && !event.shiftKey) {
+      sendMessage();
+    } else if (event.key === 'Enter' && event.shiftKey) {
+      event.preventDefault(); // Prevent default form submission
+      const messageInput = document.getElementById('message');
+      messageInput.value += '\n'; // Insert a newline
     }
   };
+
+  // Function to extract only the time from a timestamp
+  function extractTime(timestamp) {
+    const dateObj = new Date(timestamp);
+    return dateObj.toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
 
   
   // Called multiple times to generate and display the messages
   const createMessage = (name, msg, date, profile_picture) => {
     // Replace all newlines with <br> tags
     msg = msg.replace(/\n/g, "<br>");
+    const timeOnly = extractTime(date);
     const content = `
     <div class="text">
       <div>
@@ -118,7 +126,7 @@
           <strong>${name}</strong>: ${msg}
         </span>
       </div>
-      <span class="muted">${date}</span>
+      <span class="muted">${timeOnly}</span>
     </div>
     `
     messages.innerHTML += content; // adds content into the messages div with id=messages
@@ -174,17 +182,18 @@
       // Determine background color based on depth
       const backgroundColor = `rgba(175, 175, 175, ${0.03 + depth * 0.03})`; // Adjust the rgba values as needed
       commentElement.style.backgroundColor = backgroundColor;
+      const timeOnly = extractTime(commentData.timestamp);
       commentElement.innerHTML = `
           <div>
             <img src='data:image/png;base64,${commentData.profile_picture}' alt='Profile Picture'>
             <strong>${commentData.username}</strong>: ${commentData.text}
           </div>
-          <div class='timestamp'>${commentData.timestamp}</div>
+          <div class='timestamp'>${timeOnly}</div>
           <div class='votes'>
             <i class='fa fa-thumbs-up ${upvoteClass}' onclick='voteComment(${commentData.id}, 1)'></i>
             <span id='votes_${commentData.id}'>${commentData.votes}</span>
             <i class='fa fa-thumbs-down ${downvoteClass}' onclick='voteComment(${commentData.id}, -1)'></i>
-            <button id='reply_${commentData.id}' class='reply-btn' onclick='handleReply(${commentData.id}, "${commentData.username}", "${commentData.text.replace(/"/g, '\\"')}", "${commentData.timestamp}")'>Reply</button>
+            <button id='reply_${commentData.id}' class='reply-btn' onclick='handleReply(${commentData.id}, "${commentData.username}", "${commentData.text.replace(/"/g, '\\"')}", "${timeOnly}")'>Reply</button>
             ${reportButtonHtml}
 
           </div>
@@ -341,8 +350,12 @@
 
 
   const checkEnterComment = (event) => {
-    if (event.key === 'Enter') {
-    submitComment();
+    if (event.key === 'Enter' && !event.shiftKey) {
+      submitComment();
+    } else if (event.key === 'Enter' && event.shiftKey) {
+      event.preventDefault();
+      const commentInput = document.getElementById('new-comment-text');
+      commentInput.value += '\n';
     }
   };
 
@@ -601,6 +614,7 @@
       // Replace all newlines with <br> tags
       msg = msg.replace(/\n/g, "<br>");
       // Create the HTML element here
+      const timeOnly = extractTime(date);
       const content = `
       <div class="text">
         <div>
@@ -609,7 +623,7 @@
             <strong>${name}</strong>: ${msg}
           </span>
         </div>
-        <span class="muted">${date}</span>
+        <span class="muted">${timeOnly}</span>
       </div>
       `
       messagesChatbot.innerHTML += content;
@@ -662,9 +676,13 @@
   });
 
   const checkEnterChatbot = (event) => {
-      if (event.key === 'Enter') {
-          sendMessageToChatbot();
-      }
+    if (event.key === 'Enter' && !event.shiftKey) {
+      sendMessageToChatbot();
+    } else if (event.key === 'Enter' && event.shiftKey) {
+      event.preventDefault(); // Prevent default form submission
+      const chatbotInput = document.getElementById('message-chatbot');
+      chatbotInput.value += '\n'; // Insert a newline
+    }
   };
 
   // When the user clicks on the session

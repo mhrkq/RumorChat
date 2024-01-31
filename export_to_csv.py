@@ -35,7 +35,7 @@ def export_to_csv():
             filename = os.path.join('data', f"{table.__tablename__}.csv")
             filenames.append(filename)
 
-            with open(filename, 'w', newline='') as csvfile:
+            with open(filename, 'w', newline='', encoding="utf-8") as csvfile:
                 writer = csv.writer(csvfile)
 
                 # Write header

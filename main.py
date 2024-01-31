@@ -122,7 +122,7 @@ class Comments(db.Model):
     parent_id = db.Column(db.Integer, db.ForeignKey('comments.id'), nullable=True)  # For hierarchical structure
     username = db.Column(db.String, nullable=False)
     text = db.Column(db.String, nullable=False)
-    timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    timestamp = db.Column(db.DateTime, nullable=False, default=datetime.now)
     votes = db.Column(db.Integer, default=0)
     # Hierarchical relationship to enable tree-like structure of comments
     replies = db.relationship('Comments', backref=db.backref('parent', remote_side=[id]), lazy='dynamic')
@@ -132,6 +132,8 @@ class CommentVotes(db.Model):
     comment_id = db.Column(db.Integer, db.ForeignKey('comments.id'), nullable=False)
     username = db.Column(db.String, nullable=False)
     vote = db.Column(db.Integer, nullable=False)  # 1 for upvote, -1 for downvote
+    room_code = db.Column(db.String, db.ForeignKey('rooms.code'), nullable=False)
+
 
     def __repr__(self):
         return f'<CommentVotes {self.username} {self.vote}>'
@@ -141,8 +143,9 @@ class CommentReports(db.Model):
     comment_id = db.Column(db.Integer, db.ForeignKey('comments.id'), nullable=False)
     reporter_username = db.Column(db.String, nullable=False)
     reason = db.Column(db.String, nullable=False)
-    date_reported = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-
+    date_reported = db.Column(db.DateTime, nullable=False, default=datetime.now)
+    room_code = db.Column(db.String, db.ForeignKey('rooms.code'), nullable=False)
+    
     def __repr__(self):
         return f'<CommentReport {self.comment_id} \n Reported by {self.reporter_username} on {self.date_reported} \n Reason: {self.reason}>'    
 
@@ -371,24 +374,7 @@ def room():
         )
         start_time = time()
     
-    # Query for comments in the current room
-    # comments = Comments.query.filter_by(room_code=room).order_by(Comments.timestamp).all()
-    # comments_data = []
-    # for comment in comments:
-    #     user_vote_obj = CommentVotes.query.filter_by(comment_id=comment.id, username=name).first()
-    #     user_vote = 0  # Default to no vote
-    #     if user_vote_obj:
-    #         user_vote = user_vote_obj.vote
-    #     comments_data.append({
-    #         "id": comment.id,
-    #         "text": comment.text,
-    #         "username": comment.username,
-    #         "timestamp": comment.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-    #         "votes": comment.votes,
-    #         "userVote": user_vote,
-    #         "profile_picture": profile_pictures.get(comment.username, "")
-    #     })
-    
+
     # Recursive Query for comments in the current room
     comments_data = fetch_comments_with_replies(session.get("room"), comment_id=None)
         
@@ -546,7 +532,7 @@ def handle_vote(data):
             existing_vote.vote = vote
     else:
         # New vote
-        new_vote = CommentVotes(comment_id=comment_id, username=username, vote=vote)
+        new_vote = CommentVotes(comment_id=comment_id, username=username, vote=vote, room_code=session.get("room"))
         db.session.add(new_vote)
 
     # Calculate the updated vote count
@@ -602,7 +588,7 @@ def submit_report():
     if not comment_id or not reporter_username or not reason:
         return jsonify({"success": False, "message": "Missing report details"})
 
-    new_report = CommentReports(comment_id=comment_id, reporter_username=reporter_username, reason=reason)
+    new_report = CommentReports(comment_id=comment_id, reporter_username=reporter_username, reason=reason, room_code=session.get("room"))
     db.session.add(new_report)
     db.session.commit()
     
