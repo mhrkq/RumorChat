@@ -7,7 +7,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.sql import text
 
 # Import the app instance and your models from your main module
-from main import app, db, Rooms, Messages, ChatbotMessages, Comments, CommentVotes, CommentReports
+from main import app, db, Rooms, Messages, ChatbotMessages, Comments, CommentVotes, CommentReports, Annoucements
 
 DB_NAME = os.getenv("DB_NAME")
 DB_USER = os.getenv("DB_USER")
@@ -21,7 +21,7 @@ from main import db
 def export_to_csv():
     # Push an application context
     with app.app_context():
-        tables = [Rooms, Messages, ChatbotMessages, Comments, CommentVotes, CommentReports]
+        tables = [Rooms, Messages, ChatbotMessages, Comments, CommentVotes, CommentReports, Annoucements]
         filenames = []
 
         # Ensure the data directory exists
@@ -54,7 +54,7 @@ def zip_data_folder():
 
 def reset_database():
     with engine.connect() as connection:
-        for table in [Rooms.__tablename__, Messages.__tablename__, ChatbotMessages.__tablename__, Comments.__tablename__, CommentVotes.__tablename__, CommentReports.__tablename__]:
+        for table in [Rooms.__tablename__, Messages.__tablename__, ChatbotMessages.__tablename__, Comments.__tablename__, CommentVotes.__tablename__, CommentReports.__tablename__, Annoucements.__tablename__]:
             print(f"Dropping table {table}...")
             with connection.begin():
                 connection.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE;"))

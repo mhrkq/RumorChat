@@ -27,7 +27,9 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from threading import Lock
 import together
-
+from sqlalchemy.dialects.postgresql import JSON
+import json
+from sqlalchemy.sql import text
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Run Flask App")
@@ -93,34 +95,39 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 # initialisation object for database
 db = SQLAlchemy(app)
 
+# # Global vote session cache
+# vote_sessions = {}
 
 # Database Schema
 class Rooms(db.Model):
     code = db.Column(db.String, primary_key=True)
-    members = db.Column(db.String)  # Storing members as a comma-separated string
+    # members = db.Column(db.String)  # Storing members as a comma-separated string
     # Relationship
+    members = db.Column(JSON)  # Use db.String if JSON is not available, and serialize manually
     messages = db.relationship("Messages", backref="room_info", lazy=True)
 
 class Messages(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     room_code = db.Column(db.String, db.ForeignKey("rooms.code"), nullable=False)
     name = db.Column(db.String, nullable=False)
+    user_type = db.Column(db.String, nullable=False)  # New field for user type
     message = db.Column(db.String, nullable=False)
-    date = db.Column(db.DateTime, nullable=False)
-
+    date = db.Column(db.DateTime, nullable=False, default=datetime.now)
 class ChatbotMessages(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String, nullable=False)
     owner = db.Column(db.String, nullable=False)
+    user_type = db.Column(db.String, nullable=False)  # New field for user type
     session = db.Column(db.Integer, nullable=False)
     message = db.Column(db.String, nullable=False)
-    date = db.Column(db.DateTime, nullable=False)
+    date = db.Column(db.DateTime, nullable=False, default=datetime.now)
 
 class Comments(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     room_code = db.Column(db.String, db.ForeignKey("rooms.code"), nullable=False)
     parent_id = db.Column(db.Integer, db.ForeignKey('comments.id'), nullable=True)  # For hierarchical structure
     username = db.Column(db.String, nullable=False)
+    user_type = db.Column(db.String, nullable=False)  # New field for user type
     text = db.Column(db.String, nullable=False)
     timestamp = db.Column(db.DateTime, nullable=False, default=datetime.now)
     votes = db.Column(db.Integer, default=0)
@@ -131,9 +138,9 @@ class CommentVotes(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     comment_id = db.Column(db.Integer, db.ForeignKey('comments.id'), nullable=False)
     username = db.Column(db.String, nullable=False)
+    user_type = db.Column(db.String, nullable=False)  # New field for user type
     vote = db.Column(db.Integer, nullable=False)  # 1 for upvote, -1 for downvote
     room_code = db.Column(db.String, db.ForeignKey('rooms.code'), nullable=False)
-
 
     def __repr__(self):
         return f'<CommentVotes {self.username} {self.vote}>'
@@ -142,12 +149,27 @@ class CommentReports(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     comment_id = db.Column(db.Integer, db.ForeignKey('comments.id'), nullable=False)
     reporter_username = db.Column(db.String, nullable=False)
+    user_type = db.Column(db.String, nullable=False)  # New field for user type
     reason = db.Column(db.String, nullable=False)
     date_reported = db.Column(db.DateTime, nullable=False, default=datetime.now)
     room_code = db.Column(db.String, db.ForeignKey('rooms.code'), nullable=False)
     
     def __repr__(self):
         return f'<CommentReport {self.comment_id} \n Reported by {self.reporter_username} on {self.date_reported} \n Reason: {self.reason}>'    
+
+class Annoucements(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    room_code = db.Column(db.String, db.ForeignKey('rooms.code'), nullable=False)
+    name = db.Column(db.String, nullable=False)
+    message = db.Column(db.String, nullable=False)
+    date = db.Column(db.DateTime, nullable=False, default=datetime.now)
+
+# class VoteSession(db.Model):
+#     id = db.Column(db.Integer, primary_key=True)
+#     room_code = db.Column(db.String, db.ForeignKey('rooms.code'), nullable=False)
+#     start_time = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+#     end_time = db.Column(db.DateTime, nullable=True)
+#     votes = db.Column(db.JSON, nullable=True)  # This will store a dictionary of votes
 
 
 # initialisation object for socketio library
@@ -233,6 +255,8 @@ def home():
         # False if doesn't exist
         join = request.form.get("join", False)
         create = request.form.get("create", False)
+        # Grab user_type from form
+        user_type = request.form.get("user_type")
 
         # Check if name contains symbols that are not typically safe
         if not name or not all(char in ascii_letters + digits + " " for char in name):
@@ -303,6 +327,7 @@ def home():
         # Stored persistently between requests
         session["room"] = code
         session["name"] = name
+        session["user_type"] = user_type
 
         # Check if there's already a preexisting initial_chat_session for this user
         existing_session = ChatbotMessages.query.filter_by(
@@ -320,6 +345,7 @@ def home():
                 name="Chatbot",
                 owner=name,
                 session=1,
+                user_type=user_type,  # Pass the user_type here
                 message=f"Started new session: 1",
                 date=datetime.now(),
             )
@@ -345,6 +371,7 @@ def room():
         print(f"Time started for room()")
     room = session.get("room")
     name = session.get("name")
+    user_type = session.get("user_type")
     # Ensure user can only go to /room route if they either generated a new room
     # or joined an existing room from the home page
     room_info = Rooms.query.filter_by(code=room).first()
@@ -359,8 +386,19 @@ def room():
             "name": message.name,
             "message": message.message,
             "date": message.date.strftime("%Y-%m-%d %H:%M:%S"),
+            "user_type": message.user_type,  # New field for user type
         }
         for message in room_info.messages
+    ]
+    comment_reports = CommentReports.query.filter_by(room_code=room).order_by(CommentReports.date_reported.desc()).all()
+    comment_reports_list = [
+        {
+            "comment_id": report.comment_id,
+            "reporter_username": report.reporter_username,
+            "reason": report.reason,
+            "date_reported": report.date_reported.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        for report in comment_reports
     ]
 
     # Check and generate identicon for each name in messages_list
@@ -378,8 +416,6 @@ def room():
     # Recursive Query for comments in the current room
     comments_data = fetch_comments_with_replies(session.get("room"), comment_id=None)
         
-    
-
     # Query for chatbot messages in default session (session 1)
     chatbot_messages = ChatbotMessages.query.filter_by(owner=name, session=1).all()
     chatbot_messages_list = [
@@ -388,6 +424,7 @@ def room():
             "session": msg.session,
             "owner": msg.owner,
             "message": msg.message,
+            "user_type": msg.user_type,  
             "date": msg.date.strftime("%Y-%m-%d %H:%M:%S"),
         }
         for msg in chatbot_messages
@@ -403,7 +440,9 @@ def room():
     for chatbot_msg in chatbot_messages_list:
         if chatbot_msg["session"] > max_session:
             max_session = chatbot_msg["session"]
+    latestAnnouncement = Annoucements.query.filter_by(room_code=room).order_by(Annoucements.date.desc()).first()
 
+    
     # remove_inactive_members_from_db(room)
     if LOGGING:
         print(f"Time taken to finish room(): {time() - start_time} seconds")
@@ -414,9 +453,12 @@ def room():
         messages=messages_list,
         chatbot_messages=chatbot_messages_list,
         comments=comments_data, 
+        comment_reports=comment_reports_list,
         profile_pictures=profile_pictures,
         name=name,
+        user_type=user_type,
         max_session=max_session,
+        latest_announcement=latestAnnouncement,
     )
 
 
@@ -440,6 +482,7 @@ def message(data):
         "name": session.get("name"),
         "message": data["data"],
         "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "user_type": session.get("user_type"),  # Pass the user_type here
         "profile_picture": profile_pictures.get(session.get("name"), ""),
     }
 
@@ -456,6 +499,7 @@ def message(data):
         room_code=room,
         name=content["name"],
         message=content["message"],
+        user_type=content["user_type"],  # New field for user type
         date=content["date"],
     )
     db.session.add(msg)
@@ -478,6 +522,7 @@ def handle_comment(data):
     username = session.get("name")
     text = data["text"]
     parent_id = data.get("parent_id")  # None for root comments
+    user_type = session.get("user_type")
 
     if not room or not username:
         print(f"Room or username not found in session. Room: {room}, Username: {username}")
@@ -489,7 +534,7 @@ def handle_comment(data):
             print(f"Parent comment does not exist. Parent ID: {parent_id}")
             return  # Parent comment does not exist
 
-    comment = Comments(room_code=room, username=username, text=text, parent_id=parent_id)
+    comment = Comments(room_code=room, username=username, text=text, parent_id=parent_id, user_type=user_type)
     db.session.add(comment)
     db.session.commit()
     
@@ -507,6 +552,7 @@ def handle_comment(data):
         "username": username,
         "timestamp": comment.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
         "votes": vote_count,  # Actual votes count
+        "user_type": user_type,  # New field for user type
         "profile_picture": profile_pictures.get(username, ""),
         "parent_id": parent_id
     }, room=room)
@@ -532,7 +578,7 @@ def handle_vote(data):
             existing_vote.vote = vote
     else:
         # New vote
-        new_vote = CommentVotes(comment_id=comment_id, username=username, vote=vote, room_code=session.get("room"))
+        new_vote = CommentVotes(comment_id=comment_id, username=username, vote=vote, room_code=session.get("room"), user_type=session.get("user_type"))
         db.session.add(new_vote)
 
     # Calculate the updated vote count
@@ -570,7 +616,8 @@ def fetch_comments_with_replies(room_code, comment_id=None):
             "userVote": user_vote,
             "profile_picture": profile_pictures.get(comment.username, ""),
             "replies": replies,
-            "reportedByUser": reported_by_user 
+            "reportedByUser": reported_by_user ,
+            "user_type": comment.user_type,  # New field for user type
         })
     return comments_data
 
@@ -587,10 +634,11 @@ def submit_report():
 
     if not comment_id or not reporter_username or not reason:
         return jsonify({"success": False, "message": "Missing report details"})
-
-    new_report = CommentReports(comment_id=comment_id, reporter_username=reporter_username, reason=reason, room_code=session.get("room"))
+    date_reported = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    new_report = CommentReports(comment_id=comment_id, reporter_username=reporter_username, reason=reason, date_reported=date_reported, room_code=session.get("room"), user_type=session.get("user_type"))
     db.session.add(new_report)
     db.session.commit()
+    socketio.emit("new_report", {"comment_id": comment_id, "reporter_username": reporter_username, "reason": reason, "date_reported":date_reported}, room=session.get("room"))
     
     return jsonify({"success": True, "message": "Report submitted successfully"})
 
@@ -644,6 +692,7 @@ def connect(auth):
         name=content["name"],
         message=content["message"],
         date=content["date"],
+        user_type="ADMIN",  # New field for user type
     )
     db.session.add(msg)
     db.session.commit()
@@ -653,33 +702,31 @@ def connect(auth):
         )
         start_time = time()
 
-    members_list = room_info.members.split(",") if room_info.members else []
-    # Add name to members list if name doesn't there exist; prevents duplicate names in room upon refresh from same session
-    if name not in members_list:
-        members_list.append(name)
-    room_info.members = ",".join(members_list)
-    if LOGGING:
-        print(
-            f"Time taken to add members to room_info in connect(): {time() - start_time} seconds"
-        )
-        start_time = time()
+    # members_list = room_info.members.split(",") if room_info.members else []
+    # # Add name to members list if name doesn't there exist; prevents duplicate names in room upon refresh from same session
+    # if name not in members_list:
+    #     members_list.append(name)
+    # room_info.members = ",".join(members_list)
 
-    db.session.commit()
+    # db.session.commit()
 
-    if LOGGING:
-        print(
-            f"Time taken to commit added members to room_info in connect(): {time() - start_time} seconds"
-        )
-        start_time = time()
-
-    # Inform clients that the member list has changed
-    emit("memberChange", members_list, to=room)
+    # # Inform clients that the member list has changed
+    # emit("memberChange", members_list, to=room)
+    if room_info:
+        members = json.loads(room_info.members) if room_info.members else []
+        # Check if member is already in the list to avoid duplication
+        if not any(member['name'] == session.get("name") for member in members):
+            members.append({"name": session.get("name"), "user_type": session.get("user_type", "villager")})
+        room_info.members = json.dumps(members)
+        db.session.commit()
+        # Emit the updated members list
+        emit("memberChange", members, to=session.get("room"))
 
     if LOGGING:
         print(
             f"Time taken to commit added members to room_info in connect(): {time() - start_time} seconds"
         )
-    print(f"{name} has joined room {room}. Current Members: {members_list}")
+    print(f"{name} has joined room {room}. Current Members: {members}")
 
 
 # Disconnect occurs when user closes the tab or refreshes the page
@@ -712,6 +759,7 @@ def disconnect():
         name=content["name"],
         message=content["message"],
         date=content["date"],
+        user_type="ADMIN",  # New field for user type
     )
     db.session.add(msg)
     db.session.commit()
@@ -723,26 +771,129 @@ def disconnect():
 
     members_list = []
     # Remove name from members list of the room (in the database) on disconnect
+    # if room_info:
+    #     members_list = room_info.members.split(",") if room_info.members else []
+    #     if name in members_list:
+    #         members_list.remove(name)
+    #     room_info.members = ",".join(members_list)
+    #     db.session.commit()
     if room_info:
-        members_list = room_info.members.split(",") if room_info.members else []
-        if name in members_list:
-            members_list.remove(name)
-        room_info.members = ",".join(members_list)
+        members = json.loads(room_info.members) if room_info.members else []
+        # Remove the member who is leaving
+        members = [member for member in members if member['name'] != session.get("name")]
+        room_info.members = json.dumps(members)
         db.session.commit()
-        if LOGGING:
-            print(
-                f"Time taken to remove members from members list and commit change in disconnect(): {time() - start_time} seconds"
-            )
-            start_time = time()
+        # Emit the updated members list
+        emit("memberChange", members, to=session.get("room"))
 
     send(content, to=room)
     # Inform clients that the member list has changed
-    emit("memberChange", members_list, to=room)
+    # emit("memberChange", members_list, to=room)
     if LOGGING:
         print(
             f"Time taken to send data, emit new members list and conclude disconnect(): {time() - start_time} seconds"
         )
+###### Voting Routes ########
+# @app.route("/start_vote", methods=["POST"])
+# def start_vote():
+#     if session.get("user_type") != "ADMIN":
+#         return jsonify({"error": "Unauthorized"}), 403
+#     # Assuming room_code is available in the session
+#     room_code = session.get("room")
+#     success = start_vote_session(room_code)
+#     if success:
+#         # Notify all clients in the room
+#         socketio.emit("vote_started", room=room_code)
+#         return jsonify({"success": True})
+#     else:
+#         return jsonify({"error": "Vote session already active"}), 400
 
+# @app.route("/end_vote", methods=["POST"])
+# def end_vote():
+#     if session.get("user_type") != "ADMIN":
+#         return jsonify({"error": "Unauthorized"}), 403
+#     room_code = session.get("room")
+#     success = end_vote_session(room_code)
+#     if success:
+#         # Notify all clients and provide results as needed
+#         socketio.emit("vote_ended", room=room_code)
+#         return jsonify({"success": True})
+#     else:
+#         return jsonify({"error": "No active vote session"}), 400
+    
+# @app.route("/cast_vote", methods=["POST"])
+# def cast_vote():
+#     # This route is a placeholder. Actual vote casting would be handled via Socket.IO
+    pass
+
+@app.route("/post_announcement", methods=["POST"])
+def post_announcement():
+    if session.get("user_type") != "ADMIN":
+        return jsonify({"error": "Unauthorized"}), 403
+    announcement = request.form.get("announcement")
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    room_code = session.get("room")
+    name = session.get("name")
+    # Broadcast announcement to room
+    socketio.emit("new_announcement", {"announcement": announcement, "timestamp":timestamp, "name":name}, room=room_code)
+    announcementDict = Annoucements(room_code=room_code, name=name, message=announcement, date=timestamp)
+    db.session.add(announcementDict)
+    db.session.commit()
+    return jsonify({"success": True})
+
+# @socketio.on("start_vote")
+# def handle_start_vote(data):
+#     if session.get("user_type") == "ADMIN" and start_vote_session(session.get("room")):
+#         emit("vote_started", room=session.get("room"))
+
+# @socketio.on("end_vote")
+# def handle_end_vote(data):
+#     if session.get("user_type") == "ADMIN" and end_vote_session(session.get("room")):
+#         emit("vote_ended", room=session.get("room"))
+
+# # Handle vote casting via Socket.IO
+# @socketio.on("cast_vote")
+# def handle_cast_vote(data):
+#     votee = data["votee"]
+#     room_code = session.get("room")
+#     voter = session.get("name")
+#     user_type = session.get("user_type")
+
+#     # Update vote locally for ADMIN without broadcasting globally
+#     if user_type == 'ADMIN':
+#         # Logic to handle vote casting for ADMIN view
+#         pass
+    
+# def start_vote_session(room_code):
+#     print(vote_sessions)
+#     if room_code in vote_sessions:
+#         # Handle already active vote session error
+#         return False
+#     vote_sessions[room_code] = {
+#         "start_time": datetime.utcnow(),
+#         "votes": {},  # {voter_name: votee_name}
+#         # "active": True
+#     }
+#     return True
+
+# def end_vote_session(room_code):
+#     session = vote_sessions.get(room_code)
+#     print(f"Session: {session}")
+#     if session: #and session["active"]:
+#         session["end_time"] = datetime.utcnow()
+#         # session["active"] = False
+#         # Process and save session data to database here
+#         save_vote_session_to_db(room_code, session)
+#         del vote_sessions[room_code]  # Clean up after saving
+#         return True
+#     return False
+
+# def vote(room_code, voter_name, votee_name):
+#     session = vote_sessions.get(room_code)
+#     if session: #and session["active"]:
+#         session["votes"][voter_name] = votee_name
+#         return True
+#     return False
 
 ###### Chatbot Routes ########
 # For use with AJAX (Asynchronous Javascript and XML) requests
@@ -833,6 +984,7 @@ def create_new_session():
         name="Chatbot",
         owner=name,
         session=new_session,
+        user_type="ADMIN",
         message=f"Started new session: {new_session}",
         date=datetime.now(),
     )
@@ -855,6 +1007,7 @@ def chatbot_message(data):
     session_id = data["session"]
     message = data["message"]
     room = session.get("room")
+    user_type = session.get("user_type")
     chatbot_history = retrieve_chatbot_history(name, session_id)
     # if not chatbot_history:
     #     print("chatbot history is empty for chatbot_req")
@@ -870,7 +1023,7 @@ def chatbot_message(data):
     #     message = full_prompt
 
     chatbot_msg = ChatbotMessages(
-        name=name, owner=name, session=session_id, message=message, date=datetime.now()
+        name=name, owner=name, session=session_id, message=message, date=datetime.now(), user_type=user_type
     )
     db.session.add(chatbot_msg)
     db.session.commit()
@@ -960,7 +1113,7 @@ def form_message_pairs(chatbot_history):
 
 
 # Function to simulate the delay for the chatbot response
-def background_task(name, sid, session_id, room_code, prompt):
+def background_task(name, sid, session_id, room_code, prompt, user_type):
     global chatbot_requests_in_progress
     with chatbot_lock:
         chatbot_requests_in_progress += 1
@@ -1109,6 +1262,7 @@ def background_task(name, sid, session_id, room_code, prompt):
             session=session_id,
             message=response,
             date=datetime.now(),
+            user_type="ADMIN",
         )
         db.session.add(chatbot_msg)
         db.session.commit()
@@ -1138,9 +1292,10 @@ def chatbot_message(data):
     session_id = data["session"]
     prompt = data["message"]
     room = session.get("room")
+    user_type = session.get("user_type")
 
     # Run the background task without blocking
-    socketio.start_background_task(background_task, name, sid, session_id, room, prompt)
+    socketio.start_background_task(background_task, name, sid, session_id, room, prompt, user_type)
 
 
 #################################
@@ -1156,68 +1311,68 @@ def heartbeat(data):
     last_heartbeat[room][name] = datetime.now()
 
 
-def cleanup_inactive_members():
-    print("Cleanup task started")
-    while True:
-        current_time = datetime.now()
+# def cleanup_inactive_members():
+#     print("Cleanup task started")
+#     while True:
+#         current_time = datetime.now()
 
-        for room, members in last_heartbeat.items():
-            for member, last_time in list(members.items()):
-                if (current_time - last_time) > timedelta(minutes=2):
-                    # This member has been inactive for more than two minutes
-                    room_info = Rooms.query.filter_by(code=room).first()
-                    if room_info and member in room_info.members.split(","):
-                        # Remove member from members list and commit
-                        members_list = room_info.members.split(",")
-                        members_list.remove(member)
-                        room_info.members = ",".join(members_list)
-                        db.session.commit()
+#         for room, members in last_heartbeat.items():
+#             for member, last_time in list(members.items()):
+#                 if (current_time - last_time) > timedelta(minutes=2):
+#                     # This member has been inactive for more than two minutes
+#                     room_info = Rooms.query.filter_by(code=room).first()
+#                     if room_info and member in room_info.members.split(","):
+#                         # Remove member from members list and commit
+#                         members_list = room_info.members.split(",")
+#                         members_list.remove(member)
+#                         room_info.members = ",".join(members_list)
+#                         db.session.commit()
 
-                        # Notify other members
-                        content = {
-                            "name": "Room",
-                            "message": f"{member} has been removed due to inactivity",
-                            "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                            "profile_picture": profile_pictures.get("Room", ""),
-                        }
-                        # send(content, to=room)
-                        emit("memberChange", members_list, to=room)
-                    # Remove the member from our tracking dict
-                    del last_heartbeat[room][member]
-                    print(f"Removed {member} from {room} due to inactivity")
+#                         # Notify other members
+#                         content = {
+#                             "name": "Room",
+#                             "message": f"{member} has been removed due to inactivity",
+#                             "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+#                             "profile_picture": profile_pictures.get("Room", ""),
+#                         }
+#                         # send(content, to=room)
+#                         emit("memberChange", members_list, to=room)
+#                     # Remove the member from our tracking dict
+#                     del last_heartbeat[room][member]
+#                     print(f"Removed {member} from {room} due to inactivity")
 
-        # Sleep for a minute before checking again
-        eventlet.sleep(60)
+#         # Sleep for a minute before checking again
+#         eventlet.sleep(60)
 
 
-def remove_inactive_members_from_db(room_code):
-    current_time = datetime.now()
-    room_info = Rooms.query.filter_by(code=room_code).first()
+# def remove_inactive_members_from_db(room_code):
+#     current_time = datetime.now()
+#     room_info = Rooms.query.filter_by(code=room_code).first()
 
-    if room_info:
-        db_members_list = room_info.members.split(",") if room_info.members else []
-        active_members = []
+#     if room_info:
+#         db_members_list = room_info.members.split(",") if room_info.members else []
+#         active_members = []
 
-        for member in db_members_list:
-            last_time = last_heartbeat.get(room_code, {}).get(member)
+#         for member in db_members_list:
+#             last_time = last_heartbeat.get(room_code, {}).get(member)
 
-            if last_time and (current_time - last_time) <= timedelta(minutes=1):
-                active_members.append(member)
-            else:
-                # This member is considered inactive. Notify other members.
-                content = {
-                    "name": "Room",
-                    "message": f"{member} was removed due to inactivity",
-                    "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "profile_picture": profile_pictures.get("Room", ""),
-                }
-                print(f"Removed {member} due to inactivity")
-                # send(content, to=room_code)
-                socketio.emit("memberChange", active_members, to=room_code)
+#             if last_time and (current_time - last_time) <= timedelta(minutes=1):
+#                 active_members.append(member)
+#             else:
+#                 # This member is considered inactive. Notify other members.
+#                 content = {
+#                     "name": "Room",
+#                     "message": f"{member} was removed due to inactivity",
+#                     "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+#                     "profile_picture": profile_pictures.get("Room", ""),
+#                 }
+#                 print(f"Removed {member} due to inactivity")
+#                 # send(content, to=room_code)
+#                 socketio.emit("memberChange", active_members, to=room_code)
 
-        # Update members list in database
-        room_info.members = ",".join(active_members)
-        db.session.commit()
+#         # Update members list in database
+#         room_info.members = ",".join(active_members)
+#         db.session.commit()
 
 
 # Start the cleanup task

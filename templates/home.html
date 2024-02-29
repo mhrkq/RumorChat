@@ -10,6 +10,15 @@
     <button type="submit" name="join">Join a Room</button>
   </div>
   <button type="submit" name="create" class="create-btn">Create a Room</button>
+  <div>
+  <label for="user_type">Choose a user type:</label>
+    <select name="user_type" id="user_type">
+      <option value="villager">Villager</option>
+      <option value="seer">Seer</option>
+      <option value="werewolf">Werewolf</option>
+      <option value="ADMIN">ADMIN</option>
+  </select>
+</div>
   {% if error %}
   <ul>
     <li>{{error}}</li>

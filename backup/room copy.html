@@ -1,0 +1,804 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="parent-container">
+  <div>Room Code: {{code}}. Name: {{name}}. User Type: {{user_type}}</div>
+  
+  {% if user_type == "ADMIN" %}
+  <div class="admin-panel">
+      <button onclick="startVote()">Start Vote</button>
+      <button onclick="endVote()">End Vote</button>
+      <textarea id="announcementText"></textarea>
+      <button onclick="postAnnouncement()">Post Announcement</button>
+  </div>
+  {% endif %}
+  <div class="room-box-comments">
+    <div class="comment-box">
+      <h2>Comments:</h2>
+      <div class="comments" id="comments"></div>
+      <div id="report-form" style="display: none;">
+        <h3>Report Comment</h3>
+        <div id="report-comment-details"></div>
+        <form onsubmit="submitReport(); return false;">
+          <input type="hidden" id="report-comment-id" name="comment_id">
+          <textarea id="report-reason" name="reason" placeholder="Enter your report reason" required></textarea>
+          <button type="submit">Submit Report</button>
+          <button type="button" onclick="hideReportForm()">Cancel Report</button>
+        </form>
+      </div>
+      <div class="inputs">
+        <textarea rows="2" name="new-comment-text" id="new-comment-text" placeholder="Post your comments" onkeyup="checkEnterComment(event)"></textarea>
+        <button type="button" name="send-comment" id="send-btn-comment" onclick="submitComment()">Submit Comment</button>
+        <button id="cancel-reply-btn" style="display: none;" onclick="cancelReply()">Cancel Reply</button>
+      </div>
+      
+    </div>
+    <div class="members-box">
+      <h2>Members</h2>
+      <div class="members" id="members"></div>
+    </div>
+  </div>
+  <h2 class="announcements">(Announcements will appear here)</h2>
+  <div class="room-box">
+    <div class="message-box">
+      <h2 id="room_code">Chatbox: {{code}}</h2>
+      <div id="name" hidden>{{session['name']}}</div>
+      <div class="messages" id="messages"></div>
+      <div class="inputs">
+        <textarea rows="2" name="message" id="message" placeholder="Message" onkeyup="checkEnter(event)"></textarea>
+        <button type="button" name="send" id="send-btn" onclick="sendMessage()">
+          Send
+        </button>
+      </div>
+    </div>
+    {% if session['user_type'] in ['seer', 'werewolf', 'ADMIN'] %}
+    <div class="room-box-chatbot">
+    <div class="sessions-box">
+      <h2>LLM Sessions</h2>
+      <div class="sessions" id="sessions">
+        {% for session_number in range(1, max_session+1) %}
+          <div class="session-item" data-session="{{ session_number }}" onclick="setCurrentSession({{ session_number }})">
+            Session {{ session_number }}
+          </div>
+        {% endfor %}
+      </div>
+      <button type="button" id="new-session-btn" onclick="createNewSession()">Create New Session</button>
+    </div>
+    <div class="message-box-chatbot">
+      <h2>Personal LLM Chatbot</h2>
+      <div class="messages-chatbot" id="messages-chatbot"></div>
+      <div class="inputs">
+        <textarea rows="2" name="message-chatbot" id="message-chatbot" placeholder="Message for chatbot" onkeyup="checkEnterChatbot(event)"></textarea>
+        <button type="button" name="send-chatbot" id="send-btn-chatbot" onclick="sendMessageToChatbot()">
+          Send
+        </button>
+      </div>
+    </div>
+    {% endif %}
+</div>
+<script type="text/javascript">
+  // When socketio initiated, you directly connect to the socketio server associated
+  // with the Flask website on localhost. This emits the 'connect' event to the server.
+  var socketio = io({ transports: ['websocket'] });
+
+  const messages = document.getElementById('messages');
+  const members = document.getElementById('members');
+
+  const messagesChatbot = document.getElementById('messages-chatbot');
+  const sessions = document.getElementById('sessions');
+
+  const comments = document.getElementById('comments');
+
+  const curr_name = document.getElementById('name').innerHTML;
+  const room_code = document.getElementById('room_code').innerHTML;
+  const user_type = "{{ user_type }}";
+  console.log("My name is: " + curr_name);
+
+  var current_session = 1;  // Initialize to 1 as default session
+
+  const scrollToBottom = () => {
+    messages.offsetHeight;
+    messages.scrollTop = messages.scrollHeight;
+  };
+
+  const scrollToBottomChatbot = () => {
+    messagesChatbot.offsetHeight;
+    messagesChatbot.scrollTop = messagesChatbot.scrollHeight;
+  };
+
+  const scrollToBottomComment = () => {
+    comments.offsetHeight;
+    comments.scrollTop = comments.scrollHeight;
+  };
+
+  const checkEnter = (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      sendMessage();
+    } else if (event.key === 'Enter' && event.shiftKey) {
+      event.preventDefault(); // Prevent default form submission
+      // const messageInput = document.getElementById('message');
+      // messageInput.value += '\n'; // Insert a newline
+    }
+  };
+
+  // Function to extract only the time from a timestamp
+  function extractTime(timestamp) {
+    const dateObj = new Date(timestamp);
+    return dateObj.toLocaleTimeString('en-SG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+
+  
+  // Called multiple times to generate and display the messages
+  const createMessage = (name, msg, date, profile_picture) => {
+    // Replace all newlines with <br> tags
+    msg = msg.replace(/\n/g, "<br>");
+    const timeOnly = extractTime(date);
+    const content = `
+    <div class="text">
+      <div>
+        <img src="data:image/png;base64,${profile_picture}" alt="Profile Picture">
+        <span>
+          <strong>${name}</strong>: ${msg}
+        </span>
+      </div>
+      <span class="muted">${timeOnly}</span>
+    </div>
+    `
+    messages.innerHTML += content; // adds content into the messages div with id=messages
+    scrollToBottom();
+  };
+
+  socketio.on("message", (data) => {
+    createMessage(data.name, data.message, data.date, data.profile_picture);
+  });
+
+  const sendMessage = () => {
+    // socketio.emit('heartbeat', { room: room_code, name: curr_name});
+    console.log('send message');
+    const message = document.getElementById('message');
+    if (message.value == "") return;
+    socketio.emit('message', {data: message.value});
+    message.value = ""; // clear the message box
+    // scrollToBottom();  // Scroll to the bottom after sending a message
+  };
+
+
+
+  // Called multiple times to generate and display the comments
+  const createComment = (commentData, parentElement, depth = 0) => {
+
+     // Check if this comment already exists
+      if (document.getElementById(`comment_${commentData.id}`)) {
+          return; // Skip adding the comment if it already exists
+      }
+
+      var upvoteClass = commentData.userVote == 1 ? "voted" : "";
+      var downvoteClass = commentData.userVote == -1 ? "voted" : "";
+      var commentElement = document.createElement('div');
+      
+      var reportButtonHtml = `<button onclick='showReportForm(${commentData.id}, "${commentData.username}", "${commentData.text.replace(/"/g, '\\"')}", "${commentData.timestamp}")'>Report</button>`;
+      if (commentData.reportedByUser) {
+        reportButtonHtml = `<span>(You reported this comment)</span>`;
+        reportButtonHtml.disabled = true;
+      }
+      // Check if there are replies to determine the initial state of the replies section
+      // const repliesDisplayStyle = (commentData.replies && commentData.replies.length > 0) ? 'block' : 'none';
+      repliesDisplayStyle = 'block' // Always show replies for now
+      //var toggleRepliesButtonHtml = '';
+      //if (commentData.replies && commentData.replies.length > 0) {
+      //  toggleRepliesButtonHtml = `<button id='toggle_${commentData.id}' onclick='toggleReplies(${commentData.id})'>Collapse Replies (${commentData.replies.length})</button>`;
+      //}
+      
+      commentElement.id = `comment_${commentData.id}`;
+      commentElement.className = 'comment';
+      commentElement.setAttribute('data-user-vote', commentData.userVote);
+      commentElement.setAttribute('data-depth', depth);
+      commentElement.style.marginLeft = `${depth * 5}px`;
+      // Determine background color based on depth
+      const backgroundColor = `rgba(175, 175, 175, ${0.03 + depth * 0.03})`; // Adjust the rgba values as needed
+      commentElement.style.backgroundColor = backgroundColor;
+      const timeOnly = extractTime(commentData.timestamp);
+      commentElement.innerHTML = `
+          <div>
+            <img src='data:image/png;base64,${commentData.profile_picture}' alt='Profile Picture'>
+            <strong>${commentData.username}</strong>: ${commentData.text}
+          </div>
+          <div class='timestamp'>${timeOnly}</div>
+          <div class='votes'>
+            <i class='fa fa-thumbs-up ${upvoteClass}' onclick='voteComment(${commentData.id}, 1)'></i>
+            <span id='votes_${commentData.id}'>${commentData.votes}</span>
+            <i class='fa fa-thumbs-down ${downvoteClass}' onclick='voteComment(${commentData.id}, -1)'></i>
+            <button id='reply_${commentData.id}' class='reply-btn' onclick='handleReply(${commentData.id}, "${commentData.username}", "${commentData.text.replace(/"/g, '\\"')}", "${timeOnly}")'>Reply</button>
+            ${reportButtonHtml}
+
+          </div>
+
+          <div id='replies_${commentData.id}' class='replies' style='display: ${repliesDisplayStyle};'></div>
+          
+      `;
+
+      // Append replies if they exist
+      if (commentData.replies) {
+          commentData.replies.forEach(reply => {
+              createComment(reply, commentElement.querySelector(`#replies_${commentData.id}`), depth + 1);
+          });
+      }
+
+      // Append the comment element to the parent
+      parentElement.appendChild(commentElement);
+
+      // Apply "voted" class if needed
+      applyVoteStyles(commentData.id, commentData.userVote);
+    };
+
+  const applyVoteStyles = (commentId, userVote) => {
+      console.log(`Applying vote styles for comment ${commentId}, userVote: ${userVote}`);
+      const commentElement = document.getElementById(`comment_${commentId}`);
+      if (commentElement) {
+          const upvoteButton = commentElement.querySelector(".fa-thumbs-up");
+          const downvoteButton = commentElement.querySelector(".fa-thumbs-down");
+          if (userVote == 1) {
+              console.log(`Adding 'voted' class to upvote button for comment ${commentId}`);
+              upvoteButton.classList.add("voted");
+              downvoteButton.classList.remove("voted");
+          } else if (userVote == -1) {
+              console.log(`Adding 'voted' class to downvote button for comment ${commentId}`);
+              downvoteButton.classList.add("voted");
+              upvoteButton.classList.remove("voted");
+          } else {
+              console.log(`Removing 'voted' class from both buttons for comment ${commentId}`);
+              upvoteButton.classList.remove("voted");
+              downvoteButton.classList.remove("voted");
+          }
+      }
+  };
+
+  // Use this function to create top-level comments
+  const createTopLevelComment = (commentData) => {
+      if (document.getElementById(`comment_${commentData.id}`)) {
+          return; // Skip adding the comment if it already exists
+      }
+      createComment(commentData, document.getElementById("comments"), 0);
+  };
+
+  // Function for replying to comments
+  var currentlyReplyingTo = null;
+
+  // Function to update the reply button styles
+  const updateReplyButtonStyles = () => {
+    document.querySelectorAll(".comment button.reply-btn").forEach(button => {
+        button.classList.remove("highlighted");
+    });
+    if (currentlyReplyingTo) {
+      const replyButton = document.getElementById(`reply_${currentlyReplyingTo}`);
+      if (replyButton) {
+        replyButton.classList.add("highlighted");
+      }
+    }
+  };
+
+  // Function to handle a reply to a comment
+  const handleReply = (commentId, username, text, timestamp) => {
+    if (currentlyReplyingTo !== commentId) {
+      currentlyReplyingTo = commentId;
+      document.getElementById("new-comment-text").placeholder = `Replying to ${username}: "${text}" at ${timestamp}`;
+      document.getElementById("cancel-reply-btn").style.display = 'inline';  // Show cancel button
+    } else {
+      cancelReply();
+    }
+    updateReplyButtonStyles();
+  };
+
+  const cancelReply = () => {
+    currentlyReplyingTo = null;
+    document.getElementById("new-comment-text").placeholder = "Post your comments";
+    //document.getElementById("reply-info").innerHTML = '';
+    document.getElementById("cancel-reply-btn").style.display = 'none';  // Hide cancel button
+    updateReplyButtonStyles();
+  };
+
+
+  const toggleComments = (commentId) => {
+    var repliesDiv = document.getElementById("replies_" + commentId);
+    repliesDiv.style.display = (repliesDiv.style.display === "none" ? "block" : "none");
+  }
+
+  // Function to submit a new comment
+  const submitComment = () => {
+    var text = document.getElementById('new-comment-text').value.trim();
+  
+    // Check if the text is empty
+    if (!text) {
+      alert("Comment cannot be empty.");
+      return;
+    }
+    socketio.emit('submit_comment', { text: text, parent_id: currentlyReplyingTo });
+    document.getElementById('new-comment-text').value = '';
+    currentlyReplyingTo = null;
+    updateReplyButtonStyles();
+    cancelReply();
+    scrollToBottomComment();
+    
+  };
+
+
+  const checkEnterComment = (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      submitComment();
+    } else if (event.key === 'Enter' && event.shiftKey) {
+      event.preventDefault();
+      // const commentInput = document.getElementById('new-comment-text');
+      // commentInput.value += '\n';
+    }
+  };
+
+  const voteComment = (commentId, voteValue) => {
+    // Emit the vote to the server
+    socketio.emit('vote_comment', { comment_id: commentId, vote: voteValue });
+    // Update the button styles locally
+    const commentElement = document.getElementById(`comment_${commentId}`);
+    if (commentElement) {
+        const upvoteButton = commentElement.querySelector(".fa-thumbs-up");
+        const downvoteButton = commentElement.querySelector(".fa-thumbs-down");
+        const currentUserVote = parseInt(commentElement.getAttribute('data-user-vote'));
+
+        // Toggle vote
+        if (voteValue === currentUserVote) {
+            // User is undoing their vote
+            voteValue = 0; // Neutral state
+        }
+
+        // Apply the updated styles based on the new vote value
+        if (voteValue === 1) {
+            upvoteButton.classList.add("voted");
+            downvoteButton.classList.remove("voted");
+        } else if (voteValue === -1) {
+            downvoteButton.classList.add("voted");
+            upvoteButton.classList.remove("voted");
+        } else {
+            upvoteButton.classList.remove("voted");
+            downvoteButton.classList.remove("voted");
+        }
+
+        // Update the data-user-vote attribute to reflect the new vote state
+        commentElement.setAttribute('data-user-vote', voteValue);
+    }
+  };
+
+  socketio.on("update_vote", (data) => {
+    // console.log("Received vote update for comment: " + data.comment_id);
+    const voteElement = document.getElementById(`votes_${data.comment_id}`);
+    const commentElement = document.getElementById(`comment_${data.comment_id}`);
+    
+    if (voteElement) {
+        voteElement.innerText = data.votes;
+        // console.log("Updated vote count for comment: " + data.comment_id);
+    }
+
+  });
+
+  // Report Stuff
+
+  const showReportForm = (commentId, username, text, timestamp) => {
+    // Populate the report form with comment details
+    document.getElementById('report-comment-id').value = commentId;
+    document.getElementById('report-comment-details').textContent = `Reporting comment by ${username}: "${text}" at ${timestamp}`;
+    // Show the report form
+    document.getElementById('report-form').style.display = 'block';
+    // Disable the report button if the user has already reported this comment
+    const reportButton = document.getElementById(`report-btn-${commentId}`);
+    if (reportButton) reportButton.disabled = true;
+  };
+
+  const submitReport = () => {
+    const commentId = document.getElementById('report-comment-id').value;
+    const reason = document.getElementById('report-reason').value;
+
+    fetch('/submit_report', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: `comment_id=${commentId}&reason=${encodeURIComponent(reason)}`
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        alert('Report submitted successfully');
+        // Update the report button for this comment
+        const commentElement = document.getElementById(`comment_${commentId}`);
+        if (commentElement) {
+          const reportButton = commentElement.querySelector(`button[onclick*='showReportForm(${commentId}']`);
+          if (reportButton) {
+            reportButton.outerHTML = '<span>(You reported this comment)</span>';
+          }
+        }
+      } else {
+        alert('Failed to submit report: ' + data.message);
+      }
+    });
+
+    // Hide the report form and clear fields
+    document.getElementById('report-form').style.display = 'none';
+    document.getElementById('report-comment-id').value = '';
+    document.getElementById('report-reason').value = '';
+  };
+
+  const hideReportForm = () => {
+    document.getElementById('report-form').style.display = 'none';
+    document.getElementById('report-comment-id').value = '';
+    document.getElementById('report-reason').value = '';
+  };
+
+  socketio.on("new_comment", (data) => {
+    // Check if the new comment is a reply (has a parent_id)
+    if (data.parent_id) {
+      // Find the parent comment's replies container
+      const parentRepliesContainer = document.getElementById(`replies_${data.parent_id}`);
+      if (parentRepliesContainer) {
+        // Calculate the depth of the new comment based on the parent comment's depth
+        const parentCommentElement = document.getElementById(`comment_${data.parent_id}`);
+        const depth = parseInt(parentCommentElement.getAttribute('data-depth')) + 1;
+
+        // Create and append the new reply comment
+        createComment(data, parentRepliesContainer, depth);
+
+        // Update the collapse button for the parent comment
+        // updateCollapseButton(data.parent_id, true);
+      }
+    } else {
+      // If it's a top-level comment, append it to the main comments container
+      createComment(data, document.getElementById("comments"), 0);
+    }
+  });
+
+  socketio.on("memberChange", (membersArr) => {
+      let content = "";
+      let currentUserType = user_type; // Assuming 'user_type' is defined elsewhere to hold the current user's type
+      membersArr.forEach((member) => {
+          console.log(member);
+          // Always add member names to the display
+          content += `<div class="text"><span>${member.name === curr_name ? `<strong>${member.name}</strong>` : member.name}</span>`;
+
+          // Conditionally show the vote button for non-ADMIN and non-self (assuming 'castVote' and 'user_type' determination is handled elsewhere)
+          if (member.name !== curr_name && member.user_type !== 'ADMIN' && currentUserType !== 'ADMIN' && currentUserType !== 'villager') {
+              content += `<button class="vote-btn" onclick="castVote('${member.name}')" style="display: none;">Vote</button>`;
+          }
+
+          // Close the div for the member entry
+          content += `</div>`;
+      });
+
+      // Update the innerHTML of the members container
+      members.innerHTML = content;
+  });
+  // VOTING SECTION
+  socketio.on("vote_started", () => {
+    alert("A new vote has been called. Please cast your vote.");
+    document.querySelectorAll('.vote-btn').forEach(button => {
+      button.style.display = 'inline'; // Show vote buttons
+    });
+    // Additional UI feedback that voting has started
+    // document.getElementById('vote-status').innerHTML = 'Vote called!';
+  });
+
+  socketio.on("vote_cast", data => {
+    // Update UI to reflect the vote cast, e.g., bold the voted name
+  });
+
+  socketio.on("vote_ended", () => {
+    alert("Voting has ended. Thank you for your participation.");
+    // Hide or disable vote panel UI
+    // For ADMINs, possibly display vote results
+  });
+
+  function castVote(votee) {
+      socketio.emit("cast_vote", { votee: voteeName, room: room_code });
+      // Locally update UI to reflect the current vote
+      updateLocalVoteUI(votee);
+  }
+
+  function updateLocalVoteUI(votee) {
+      // Reset any previously bolded names
+      document.querySelectorAll('.members .text span').forEach(span => {
+          span.style.fontWeight = 'normal';
+      });
+      // Bold the currently voted member's name locally
+      document.querySelector(`.members .text span:contains('${votee}')`).style.fontWeight = 'bold';
+  }
+
+  socketio.on("new_announcement", (data) => {
+      const announcementBox = document.getElementById('announcements');
+      announcementBox.innerHTML = data.announcement; // Display the announcement
+      announcementBox.style.display = 'block'; // Make sure to show the box if it was hidden
+      console.log("New announcement received:", data.announcement);
+  });
+
+  // Function to start a vote session
+  function startVote() {
+    fetch('/start_vote', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ room: room_code }) // Assuming room_code is available
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        console.log("Vote started successfully.");
+      } else {
+        alert("Failed to start vote: " + data.error);
+      }
+    });
+  }
+
+  // Function to end a vote session
+  function endVote() {
+    fetch('/end_vote', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ room: room_code })
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        console.log("Vote ended successfully.");
+      } else {
+        alert("Failed to end vote: " + data.error);
+      }
+    });
+  }
+
+  // Function to post an announcement
+  function postAnnouncement() {
+    const announcement = document.getElementById("announcementText").value;
+    fetch('/post_announcement', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: `announcement=${encodeURIComponent(announcement)}`
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        console.log("Announcement posted successfully.");
+      } else {
+        alert("Failed to post announcement: " + data.error);
+      }
+    });
+  }
+
+
+  // CHATBOT SECTION
+
+  // Function to set the current session
+  function setCurrentSession(session) {
+      current_session = session;
+      loadSessionHistory(session);  // Load the conversation history of the new session
+      updateActiveSession();  // Update which session is visually marked as active
+  }
+
+  // Function to visually update the active session
+  function updateActiveSession() {
+    // socketio.emit('heartbeat', { room: room_code, name: curr_name});
+    // Remove the active class from all session items
+    document.querySelectorAll('.session-item').forEach((elem) => {
+      elem.classList.remove('active');
+    });
+
+    // Add the active class to the current session
+    document.querySelector(`.session-item[data-session="${current_session}"]`).classList.add('active');
+  }
+
+  // Function to load available sessions
+  function loadSessions() {
+      // socketio.emit('heartbeat', { room: room_code, name: curr_name});
+      // Implement an AJAX call here to fetch sessions.
+      // For example, it might look something like this:
+      fetch('/get_sessions', { method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ name: "{{ session['name'] }}" }) })
+          .then(response => response.json())
+          .then(data => {
+              /// Sort sessions in ascending order
+              data.sessions.sort((a, b) => a - b);  // assuming sessions are numbers
+
+              // Generate HTML for sorted sessions
+              let sessionsHtml = "";
+              data.sessions.forEach(session => {
+                sessionsHtml += `<div class="session-item" data-session="${session}" onclick="setCurrentSession(${session})">Session ${session}</div>`;
+              });
+              document.getElementById("sessions").innerHTML = sessionsHtml;
+              updateActiveSession();  // Set the initial active session
+          });
+      
+  }
+  // Function to apply vote styles to all comments
+  const applyVoteStylesToAllComments = () => {
+      document.querySelectorAll('.comment').forEach(commentElement => {
+          const commentId = commentElement.id.split('_')[1];
+          const upvoteButton = commentElement.querySelector(".fa-thumbs-up");
+          const downvoteButton = commentElement.querySelector(".fa-thumbs-down");
+
+          // Retrieve the userVote attribute stored in the comment element
+          const userVote = parseInt(commentElement.getAttribute('data-user-vote'));
+
+          if (userVote === 1) {
+              upvoteButton.classList.add("voted");
+              downvoteButton.classList.remove("voted");
+          } else if (userVote === -1) {
+              downvoteButton.classList.add("voted");
+              upvoteButton.classList.remove("voted");
+          } else {
+              upvoteButton.classList.remove("voted");
+              downvoteButton.classList.remove("voted");
+          }
+      });
+  };
+
+  // Called after all comments are loaded
+  setTimeout(applyVoteStylesToAllComments, 0);
+
+  function createNewSession() {
+    // socketio.emit('heartbeat', { room: room_code, name: curr_name});
+    // Make an AJAX call to the server to create a new session
+    fetch('/create_new_session', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({name: "{{ session['name'] }}"})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Refresh the sessions
+            loadSessions();
+        } else {
+            alert("Failed to create new session.");
+        }
+    });
+  }
+
+  // Called multiple times to generate and display the Chatbot messages
+  const createChatbotMessage = (name, msg, date, profile_picture) => {
+      // socketio.emit('heartbeat', { room: room_code, name: curr_name});
+      // Replace all newlines with <br> tags
+      msg = msg.replace(/\n/g, "<br>");
+      // Create the HTML element here
+      const timeOnly = extractTime(date);
+      const content = `
+      <div class="text">
+        <div>
+          <img src="data:image/png;base64,${profile_picture}" alt="Profile Picture">
+          <span>
+            <strong>${name}</strong>: ${msg}
+          </span>
+        </div>
+        <span class="muted">${timeOnly}</span>
+      </div>
+      `
+      messagesChatbot.innerHTML += content;
+      scrollToBottomChatbot();
+  };
+
+  const sendMessageToChatbot = () => {
+    // socketio.emit('heartbeat', { room: room_code, name: curr_name});
+    const message = document.getElementById('message-chatbot');
+    if (message.value == "") return;
+    // Disable the send button and textbox
+    document.getElementById("send-btn-chatbot").disabled = true;
+    document.getElementById("message-chatbot").disabled = true;
+    document.getElementById("new-session-btn").disabled = true;
+    // Disable session items' onclick events and appearance
+    const session_items = document.querySelectorAll('.session-item');
+    session_items.forEach(item => {
+        item.style.pointerEvents = "none";
+        item.style.opacity = "0.5";
+    });
+    // Send a request for acknowledgement
+    socketio.emit('chatbot_req', {session: current_session, message: message.value});
+    // At the same time, prompt the chatbot for a response
+    socketio.emit('chatbot_prompt', {session: current_session, message: message.value});
+    message.value = "";
+    
+  };
+
+  socketio.on("chatbot_ack", (data) => {
+    createChatbotMessage(data.name, data.message, data.date, data.profile_picture);
+    var reqCount = data.requests_in_progress;
+    messagesChatbot.innerHTML += `<div class="loading">Processing ${reqCount} ${reqCount>1 ? 'requests' : 'request'} in queue. Please wait about ${reqCount} ${reqCount>1 ? 'minutes' : 'minute'}.</div>`;
+  });
+
+  // Listen for chatbot responses
+  socketio.on("chatbot_response", (data) => {
+    // Remove "...loading" text and renable the send button and chatbot textbox
+    document.querySelector(".loading").remove();
+    document.getElementById("send-btn-chatbot").removeAttribute('disabled');
+    document.getElementById("message-chatbot").removeAttribute('disabled');
+    document.getElementById("new-session-btn").removeAttribute('disabled');
+    // Re-enable session items' onclick events and appearance
+    const session_items = document.querySelectorAll('.session-item');
+    session_items.forEach(item => {
+        item.style.pointerEvents = "auto";
+        item.style.opacity = "1";
+    });
+    // Display the chatbot's response
+    createChatbotMessage(data.name, data.message, data.date, data.profile_picture)
+  });
+
+  const checkEnterChatbot = (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      sendMessageToChatbot();
+    } else if (event.key === 'Enter' && event.shiftKey) {
+      event.preventDefault(); // Prevent default form submission
+      // const chatbotInput = document.getElementById('message-chatbot');
+      // chatbotInput.value += '\n'; // Insert a newline
+    }
+  };
+
+  // When the user clicks on the session
+  const loadSessionHistory = (session) => {
+    // socketio.emit('heartbeat', { room: room_code, name: curr_name});
+    // Implement an AJAX call to fetch session history
+    // Clear the existing chatbot messages
+    messagesChatbot.innerHTML = "";
+    // Fetch the messages for this session
+    fetch('/get_session_history', { 
+        method: 'POST', 
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name: "{{ session['name'] }}", session: session }) 
+    })
+    .then(response => response.json())
+    .then(data => {
+        data.messages.forEach(msg => {
+            createChatbotMessage(msg.name, msg.message, msg.date, msg.profile_picture);
+        });
+    });
+  };
+  //socketio.emit('heartbeat', { room: room_code, name: curr_name});
+  setInterval(function() {
+      //socketio.emit('heartbeat', { room: room_code, name: curr_name});
+  }, 30000);  // 30 seconds
+  loadSessions();  // Load the sessions when the page loads
+
+
+</script>
+{% for msg in messages %}
+<script type="text/javascript">
+  var profile_picture = "{{ profile_pictures[msg.name] if msg.name in profile_pictures else '' }}";
+  var message_text = '{{msg.message | replace('\n', ' ') | replace('"', '\\"')}}';
+  createMessage('{{msg.name}}', message_text, '{{msg.date}}', profile_picture);
+</script>
+{% endfor %}
+{% for chatbotMsg in chatbot_messages %}
+<script type="text/javascript">
+  var profile_picture = "{{ profile_pictures[chatbotMsg.name] if chatbotMsg.name in profile_pictures else '' }}";
+  createChatbotMessage('{{chatbotMsg.name}}', '{{chatbotMsg.message}}', '{{chatbotMsg.date}}', profile_picture);
+</script>
+<script type="text/javascript">
+{% for comment in comments %}
+    // santise comments by removing newlines and quotes
+    var comment_text = '{{ comment.text | replace('\n', ' ') | replace('"', '\\"') }}';
+    var commentData = {
+        id: '{{ comment.id }}',
+        username: '{{ comment.username }}',
+        text: comment_text,
+        timestamp: '{{ comment.timestamp }}',
+        votes: '{{ comment.votes }}',
+        userVote: '{{ comment.userVote }}',
+        profile_picture: '{{ profile_pictures[comment.username] if comment.username in profile_pictures else '' }}',
+        reportedByUser: {{ comment.reportedByUser | lower }},
+        replies: {{ comment.replies | tojson | safe }}
+    };
+    createTopLevelComment(commentData);
+{% endfor %}
+
+</script>
+{% endfor %}
+{% endblock %}
