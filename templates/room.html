@@ -55,11 +55,12 @@
         </button>
       </div>
     </div>
-
+    {% if session['user_type'] in ['seer', 'ADMIN'] %}
     <div class="reports-box">
       <h2>Reports:</h2>
       <div class="reports" id="reports"></div>
     </div>
+    {% endif %}
     <div class="members-box">
       <h2>Members</h2>
       <div class="members" id="members"></div>
