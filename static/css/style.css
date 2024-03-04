@@ -58,10 +58,72 @@ button:hover {
   height: 45vh;
   display: flex;
   flex-direction: column;
-  width: 80vw;
+  width: 40vw;
   align-items: stretch;
   padding: 20px;
   margin-bottom: 20px;
+}
+
+.comment-box {
+  border-color: black;
+  border-width: 2px;
+  border-style: solid;
+  border-radius: 10px;
+  background-color: whitesmoke;
+  height: 45vh;
+  display: flex;
+  flex-direction: column;
+  width: 50vw;
+  align-items: stretch;
+}
+
+.voted {
+  color: blue !important;
+  background-color: lightblue;
+  /* Or any other style to indicate the vote status */
+}
+
+.fa {
+  opacity: 0.5 !important;
+  /* Less opaque initially */
+  transition: opacity 0.3s !important;
+  /* Smooth transition for opacity change */
+}
+
+.fa.voted {
+  opacity: 1 !important;
+  /* Fully opaque when voted */
+}
+
+.fa-thumbs-up {
+  opacity: 0.5 !important ;
+  /* Less opaque initially */
+  transition: opacity 0.3s !important;
+  /* Smooth transition for opacity change */
+}
+
+.fa-thumbs-up.voted {
+  opacity: 1 !important;
+  color: blue !important;
+  /* Fully opaque when voted */
+}
+
+.fa-thumbs-down {
+  opacity: 0.5 !important ;
+  /* Less opaque initially */
+  transition: opacity 0.3s !important;
+  /* Smooth transition for opacity change */
+}
+
+.fa-thumbs-down.voted {
+  opacity: 1 !important;
+  color: blue !important;
+  /* Fully opaque when voted */
+}
+
+.upvote-button.voted i,
+.downvote-button.voted i {
+  color: blue;
 }
 
 .message-box-chatbot {
@@ -74,7 +136,7 @@ button:hover {
   height: 45vh;
   display: flex;
   flex-direction: column;
-  width: 80vw;
+  width: 40vw;
   align-items: stretch;
   padding: 20px;
   margin-bottom: 20px;
@@ -86,6 +148,12 @@ button:hover {
 }
 
 .room-box {
+  display: flex;
+  flex-direction: row;
+  margin-bottom: 20px;
+}
+
+.room-box-comments {
   display: flex;
   flex-direction: row;
   margin-bottom: 20px;
@@ -111,6 +179,45 @@ button:hover {
   margin-bottom: 20px;
 }
 
+.reports-box {
+  border-color: black;
+  border-width: 2px;
+  border-style: solid;
+  border-radius: 10px;
+  background-color: whitesmoke;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 30vw;
+  overflow-y: scroll;
+  height: 45vh;
+}
+
+.vote-box {
+  border-color: black;
+  border-width: 2px;
+  border-style: solid;
+  border-radius: 10px;
+  background-color: whitesmoke;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 10rem;
+}
+
+.hidden-box {
+  border-color: black;
+  border-width: 2px;
+  border-style: solid;
+  border-radius: 10px;
+  background-color: whitesmoke;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 10rem;
+  visibility: hidden;
+}
+
 .sessions-box {
   border: 2px solid #ddd;
   border-color: black;
@@ -124,6 +231,8 @@ button:hover {
   width:10rem;
   padding: 20px;
   margin-bottom: 20px;
+  overflow-y: scroll;
+  height: 45vh;
 }
 
 /* CSS to add a box around each session item */
@@ -160,6 +269,12 @@ button:hover {
   width: 100%;
 }
 
+.comments {
+  overflow-y: scroll;
+  flex: 1;
+  width: 100%;
+}
+
 .messages-chatbot {
   overflow-y: auto;
   max-height: 300px;
@@ -180,6 +295,7 @@ button:hover {
 h2 {
   text-align: center;
   color: #333;
+  margin: 0;
 }
 
 #message {
@@ -187,6 +303,10 @@ h2 {
 }
 
 #message-chatbot {
+  flex: 1;
+}
+
+#new-comment-text {
   flex: 1;
 }
 
@@ -198,6 +318,11 @@ h2 {
   padding-left: 10px;
   padding-right: 10px;
   margin-bottom: 10px;
+}
+
+.comment {
+  padding-left: 10px;
+
 }
 
 .chatbot-text {
