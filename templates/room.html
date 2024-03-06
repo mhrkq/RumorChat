@@ -32,7 +32,6 @@
       </div>
       <div class="inputs">
         <textarea
-          rows="2"
           name="new-comment-text"
           id="new-comment-text"
           placeholder="Post your comments"
@@ -41,6 +40,7 @@
         <button
           type="button"
           name="send-comment"
+          class="submit-comment-btn"
           id="send-btn-comment"
           onclick="submitComment()"
         >
@@ -73,7 +73,6 @@
       <div class="messages" id="messages"></div>
       <div class="inputs">
         <textarea
-          rows="2"
           name="message"
           id="message"
           placeholder="Message"
@@ -108,7 +107,6 @@
         <div class="messages-chatbot" id="messages-chatbot"></div>
         <div class="inputs">
           <textarea
-            rows="2"
             name="message-chatbot"
             id="message-chatbot"
             placeholder="Message for chatbot"
@@ -198,10 +196,10 @@
           <div>
             <img src="data:image/png;base64,${profile_picture}" alt="Profile Picture">
             <span>
-              <strong>${name} <i>${userTypeInfo}</i></strong>: ${msg}
+              <strong>${name} <i>${userTypeInfo}</i></strong>: ${timeOnly}
             </span>
           </div>
-          <span class="muted">${timeOnly}</span>
+          <span class="muted">${msg}</span>
         </div>
         `;
         messages.innerHTML += content; // adds content into the messages div with id=messages
@@ -282,11 +280,9 @@
             <img src='data:image/png;base64,${
               commentData.profile_picture
             }' alt='Profile Picture'>
-            <strong>${commentData.username}<i>${userTypeInfo}</i></strong>: ${
-          commentData.text
-        }
+            <strong>${commentData.username}<i>${userTypeInfo}</i></strong>: ${timeOnly} ${commentIdStr}
           </div>
-          <div class='timestamp'>${timeOnly} ${commentIdStr}</div> 
+          <div class='commentcolor'>${commentData.text}</div> 
           <div class='votes'>
             <i class='fa fa-thumbs-up ${upvoteClass}' onclick='voteComment(${
           commentData.id
