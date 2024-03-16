@@ -104,6 +104,7 @@ class Rooms(db.Model):
     # members = db.Column(db.String)  # Storing members as a comma-separated string
     # Relationship
     members = db.Column(JSON)  # Use db.String if JSON is not available, and serialize manually
+    topic = db.Column(db.String, nullable=False)  # New field for discussion topic
     messages = db.relationship("Messages", backref="room_info", lazy=True)
 
 class Messages(db.Model):
@@ -237,10 +238,12 @@ def home():
     # Clear session when user goes to home page
     # so that they can't navigate directly to chat page without entering name and room code
     session.clear()
-    # Query the database for all room codes
-    existing_rooms = Rooms.query.with_entities(Rooms.code).all()
+    # Query the database for all room codes and topics
+    existing_rooms = Rooms.query.all()
+    # existing_rooms = Rooms.query.with_entities(Rooms.code).all()
+    print(existing_rooms)
     # Convert query results to a list of strings
-    existing_rooms = [room.code for room in existing_rooms]
+    existing_rooms = [(room.code, room.topic) for room in existing_rooms]
 
     if LOGGING:
         print(
@@ -252,6 +255,7 @@ def home():
         # attempt to grab values from form; returns None if doesn't exist
         name = request.form.get("name")
         code = request.form.get("code")
+        topic = request.form.get("topic")
         # False if doesn't exist
         join = request.form.get("join", False)
         create = request.form.get("create", False)
@@ -266,6 +270,7 @@ def home():
                 error="Please enter a valid name (letters, numbers and space only)",
                 code=code,
                 name=name,
+                topic=topic,
                 existing_rooms=existing_rooms,
             )
 
@@ -276,6 +281,7 @@ def home():
                 error="Please enter a room code",
                 code=code,
                 name=name,
+                topic=topic,
                 existing_rooms=existing_rooms,
             )
 
@@ -291,8 +297,12 @@ def home():
             members_list = room_info.members.split(",") if room_info.members else []
         # If attempting to create a new room
         if create != False:
+            topic = request.form.get("topic")
+            # Validate topic is not empty
+            if not topic.strip():
+                return render_template("home.html", error="Topic cannot be empty", code=code, name=name, existing_rooms=existing_rooms)
             code = generate_unique_code(6)
-            new_room = Rooms(code=code, members="")
+            new_room = Rooms(code=code, members="", topic=topic)
             db.session.add(new_room)
             db.session.commit()
             if LOGGING:
@@ -309,6 +319,7 @@ def home():
                 "home.html",
                 error="Room code does not exist",
                 code=code,
+                topic=topic,
                 name=name,
                 existing_rooms=existing_rooms,
             )
@@ -318,6 +329,7 @@ def home():
                 "home.html",
                 error="Name already exists in the room",
                 code=code,
+                topic=topic,
                 name=name,
                 existing_rooms=existing_rooms,
             )
@@ -328,6 +340,7 @@ def home():
         session["room"] = code
         session["name"] = name
         session["user_type"] = user_type
+        # session["topic"] = topic
 
         # Check if there's already a preexisting initial_chat_session for this user
         existing_session = ChatbotMessages.query.filter_by(
@@ -372,6 +385,7 @@ def room():
     room = session.get("room")
     name = session.get("name")
     user_type = session.get("user_type")
+    # topic = session.get("topic")
     # Ensure user can only go to /room route if they either generated a new room
     # or joined an existing room from the home page
     room_info = Rooms.query.filter_by(code=room).first()
@@ -442,7 +456,9 @@ def room():
             max_session = chatbot_msg["session"]
     latestAnnouncement = Annoucements.query.filter_by(room_code=room).order_by(Annoucements.date.desc()).first()
 
-    
+    # Get topic for the given room
+    topic = room_info.topic
+    print(f"Room: {room}, Name: {name}, User Type: {user_type}, Topic: {topic}")
     # remove_inactive_members_from_db(room)
     if LOGGING:
         print(f"Time taken to finish room(): {time() - start_time} seconds")
@@ -456,6 +472,7 @@ def room():
         comment_reports=comment_reports_list,
         profile_pictures=profile_pictures,
         name=name,
+        topic=topic,
         user_type=user_type,
         max_session=max_session,
         latest_announcement=latestAnnouncement,
@@ -692,7 +709,7 @@ def connect(auth):
         name=content["name"],
         message=content["message"],
         date=content["date"],
-        user_type="ADMIN",  # New field for user type
+        user_type="Administrator",  # New field for user type
     )
     db.session.add(msg)
     db.session.commit()
@@ -716,7 +733,7 @@ def connect(auth):
         members = json.loads(room_info.members) if room_info.members else []
         # Check if member is already in the list to avoid duplication
         if not any(member['name'] == session.get("name") for member in members):
-            members.append({"name": session.get("name"), "user_type": session.get("user_type", "villager")})
+            members.append({"name": session.get("name"), "user_type": session.get("user_type", "User")})
         room_info.members = json.dumps(members)
         db.session.commit()
         # Emit the updated members list
@@ -759,7 +776,7 @@ def disconnect():
         name=content["name"],
         message=content["message"],
         date=content["date"],
-        user_type="ADMIN",  # New field for user type
+        user_type="Administrator",  # New field for user type
     )
     db.session.add(msg)
     db.session.commit()
@@ -796,7 +813,7 @@ def disconnect():
 ###### Voting Routes ########
 # @app.route("/start_vote", methods=["POST"])
 # def start_vote():
-#     if session.get("user_type") != "ADMIN":
+#     if session.get("user_type") != "Administrator":
 #         return jsonify({"error": "Unauthorized"}), 403
 #     # Assuming room_code is available in the session
 #     room_code = session.get("room")
@@ -810,7 +827,7 @@ def disconnect():
 
 # @app.route("/end_vote", methods=["POST"])
 # def end_vote():
-#     if session.get("user_type") != "ADMIN":
+#     if session.get("user_type") != "Administrator":
 #         return jsonify({"error": "Unauthorized"}), 403
 #     room_code = session.get("room")
 #     success = end_vote_session(room_code)
@@ -828,7 +845,7 @@ def disconnect():
 
 @app.route("/post_announcement", methods=["POST"])
 def post_announcement():
-    if session.get("user_type") != "ADMIN":
+    if session.get("user_type") != "Administrator":
         return jsonify({"error": "Unauthorized"}), 403
     announcement = request.form.get("announcement")
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -843,12 +860,12 @@ def post_announcement():
 
 # @socketio.on("start_vote")
 # def handle_start_vote(data):
-#     if session.get("user_type") == "ADMIN" and start_vote_session(session.get("room")):
+#     if session.get("user_type") == "Administrator" and start_vote_session(session.get("room")):
 #         emit("vote_started", room=session.get("room"))
 
 # @socketio.on("end_vote")
 # def handle_end_vote(data):
-#     if session.get("user_type") == "ADMIN" and end_vote_session(session.get("room")):
+#     if session.get("user_type") == "Administrator" and end_vote_session(session.get("room")):
 #         emit("vote_ended", room=session.get("room"))
 
 # # Handle vote casting via Socket.IO
@@ -859,9 +876,9 @@ def post_announcement():
 #     voter = session.get("name")
 #     user_type = session.get("user_type")
 
-#     # Update vote locally for ADMIN without broadcasting globally
-#     if user_type == 'ADMIN':
-#         # Logic to handle vote casting for ADMIN view
+#     # Update vote locally for Administrator without broadcasting globally
+#     if user_type == 'Administrator':
+#         # Logic to handle vote casting for Administrator view
 #         pass
     
 # def start_vote_session(room_code):
@@ -984,7 +1001,7 @@ def create_new_session():
         name="Chatbot",
         owner=name,
         session=new_session,
-        user_type="ADMIN",
+        user_type="Administrator",
         message=f"Started new session: {new_session}",
         date=datetime.now(),
     )
@@ -1263,7 +1280,7 @@ def background_task(name, sid, session_id, room_code, prompt, user_type):
             session=session_id,
             message=response,
             date=datetime.now(),
-            user_type="ADMIN",
+            user_type="Administrator",
         )
         db.session.add(chatbot_msg)
         db.session.commit()
@@ -1387,6 +1404,7 @@ if __name__ == "__main__":
         print("Logging disabled")
     with app.app_context():
         # Create all tables in the database if they don't exist
+        # db.drop_all()
         db.create_all()
     # eventlet.wsgi.server(eventlet.listen(('0.0.0.0', 8080)), app, debug=True)
     socketio.run(app, host="0.0.0.0", port=8080, debug=True)

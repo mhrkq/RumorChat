@@ -9,14 +9,18 @@
     <input type="text" placeholder="Room Code" name="code" value="{{code}}"/>
     <button type="submit" name="join" class="join-btn">Join a Room</button>
   </div>
+  <div>
+     <label>Topic:</label>
+    <input type="text" placeholder="Enter a topic for discussion" name="topic"/>
+  </div>
   <button type="submit" name="create" class="create-btn">Create a Room</button>
   <div>
   <label for="user_type">Choose a user type:</label>
     <select name="user_type" id="user_type">
-      <option value="villager">Villager</option>
-      <option value="seer">Seer</option>
-      <option value="werewolf">Werewolf</option>
-      <option value="ADMIN">ADMIN</option>
+      <option value="User">User</option>
+      <option value="Moderator">Moderator</option>
+      <option value="Disinformer">Disinformer</option>
+      <option value="Administrator">Administrator</option>
   </select>
 </div>
   {% if error %}
@@ -26,8 +30,8 @@
   {% endif %}
   <h4>Existing Rooms:</h4>
     <ul>
-        {% for room_code in existing_rooms %}
-        <li>{{ room_code }}</li>
+        {% for room_code, topic in existing_rooms %}
+        <li>({{ room_code }}) Topic: {{ topic }}</li>
         {% endfor %}
     </ul>
   </form>
