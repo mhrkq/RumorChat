@@ -3,7 +3,7 @@
 <div class="parent-container">
   <div>Room Code: {{code}}. Name: {{name}}. User Type: {{user_type}}</div>
   
-  {% if user_type == "ADMIN" %}
+  {% if user_type == "Administrator" %}
   <div class="admin-panel">
       <button onclick="startVote()">Start Vote</button>
       <button onclick="endVote()">End Vote</button>
@@ -50,7 +50,7 @@
         </button>
       </div>
     </div>
-    {% if session['user_type'] in ['seer', 'werewolf', 'ADMIN'] %}
+    {% if session['user_type'] in ['Moderator', 'Disinformer', 'Administrator'] %}
     <div class="room-box-chatbot">
     <div class="sessions-box">
       <h2>LLM Sessions</h2>
@@ -457,8 +457,8 @@
           // Always add member names to the display
           content += `<div class="text"><span>${member.name === curr_name ? `<strong>${member.name}</strong>` : member.name}</span>`;
 
-          // Conditionally show the vote button for non-ADMIN and non-self (assuming 'castVote' and 'user_type' determination is handled elsewhere)
-          if (member.name !== curr_name && member.user_type !== 'ADMIN' && currentUserType !== 'ADMIN' && currentUserType !== 'villager') {
+          // Conditionally show the vote button for non-Administrator and non-self (assuming 'castVote' and 'user_type' determination is handled elsewhere)
+          if (member.name !== curr_name && member.user_type !== 'Administrator' && currentUserType !== 'Administrator' && currentUserType !== 'User') {
               content += `<button class="vote-btn" onclick="castVote('${member.name}')" style="display: none;">Vote</button>`;
           }
 
@@ -486,7 +486,7 @@
   socketio.on("vote_ended", () => {
     alert("Voting has ended. Thank you for your participation.");
     // Hide or disable vote panel UI
-    // For ADMINs, possibly display vote results
+    // For Administrators, possibly display vote results
   });
 
   function castVote(votee) {
