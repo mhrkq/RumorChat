@@ -259,6 +259,7 @@ def home():
         # False if doesn't exist
         join = request.form.get("join", False)
         create = request.form.get("create", False)
+        # joinfromlist = request.form.get("joinfromlist", False)
         # Grab user_type from form
         user_type = request.form.get("user_type")
 
@@ -310,6 +311,9 @@ def home():
                     f"Time taken to commit new room in home(): {time() - start_time} seconds"
                 )
                 start_time = time()
+                
+        # if joinfromlist != False:
+        #     join = True
 
         # if not create, we assume they are trying to join a room
 
@@ -1404,7 +1408,7 @@ if __name__ == "__main__":
         print("Logging disabled")
     with app.app_context():
         # Create all tables in the database if they don't exist
-        # db.drop_all()
+        db.drop_all()
         db.create_all()
     # eventlet.wsgi.server(eventlet.listen(('0.0.0.0', 8080)), app, debug=True)
     socketio.run(app, host="0.0.0.0", port=8080, debug=True)

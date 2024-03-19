@@ -31,9 +31,15 @@
   <h4>Existing Rooms:</h4>
     <ul>
         {% for room_code, topic in existing_rooms %}
-        <li>({{ room_code }}) Topic: {{ topic }}</li>
+        <li class="joinfromlist-btn" onclick="joinRoom('{{ room_code }}')">(Room Code: {{ room_code }}) Topic: {{ topic }}</li>
         {% endfor %}
     </ul>
-  </form>
-</div>
+</form>
+
+<script>
+  function joinRoom(code) {
+      document.querySelector('input[name="code"]').value = code;
+      document.querySelector('button[name="join"]').click(); // Programmatically click the join button
+  }
+  </script>
 {% endblock %}
